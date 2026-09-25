@@ -98,7 +98,7 @@ class RtcSession(
             }.createAudioDeviceModule()
         factory = PeerConnectionFactory.builder()
             .setAudioDeviceModule(audioModule)
-            .setVideoEncoderFactory(DefaultVideoEncoderFactory(egl.eglBaseContext, true, false))
+            .setVideoEncoderFactory(DefaultVideoEncoderFactory(egl.eglBaseContext, true, true))
             .setVideoDecoderFactory(DefaultVideoDecoderFactory(egl.eglBaseContext)).createPeerConnectionFactory()
         val config = PeerConnection.RTCConfiguration(iceServers).apply {
             sdpSemantics = PeerConnection.SdpSemantics.UNIFIED_PLAN
@@ -136,7 +136,7 @@ class RtcSession(
     }
     private fun configureVideo(video: RtpTransceiver) {
         video.direction = RtpTransceiver.RtpTransceiverDirection.SEND_RECV
-        val hardwareH264 = HardwareVideoEncoderFactory(egl.eglBaseContext, true, false).supportedCodecs.any { it.name.equals("H264", ignoreCase = true) }
+        val hardwareH264 = HardwareVideoEncoderFactory(egl.eglBaseContext, true, true).supportedCodecs.any { it.name.equals("H264", ignoreCase = true) }
         if (hardwareH264) {
             val codecs = factory.getRtpSenderCapabilities(MediaStreamTrack.MediaType.MEDIA_TYPE_VIDEO).codecs
             video.setCodecPreferences(codecs.sortedBy { if (it.name.equals("H264", ignoreCase = true)) 0 else 1 })
@@ -284,8 +284,8 @@ class RtcSession(
         capturer = screen
         val helper = SurfaceTextureHelper.create("ScreenCapture", egl.eglBaseContext).also { captureHelper = it }
         // WebRTC treats BALANCED + screencast as MAINTAIN_RESOLUTION. Use the
-        // motion content path unless the user explicitly prioritizes text/detail.
-        val source = factory.createVideoSource(quality.priority == VideoPriority.RESOLUTION).also { videoSource = it }
+        // motion path for high FPS too: preserving resolution does not require a static-content encoder.
+        val source = factory.createVideoSource(quality.detailContent).also { videoSource = it }
         screen.initialize(helper, context, source.capturerObserver)
         val track = factory.createVideoTrack("screen", source).also { localVideo = it }
         check(videoSender?.setTrack(track, false) == true) { "无法连接屏幕轨道" }
@@ -361,7 +361,7 @@ class RtcSession(
         }
     }
     private fun applyEncoding() {
-        videoSource?.setIsScreencast(quality.priority == VideoPriority.RESOLUTION)
+        videoSource?.setIsScreencast(quality.detailContent)
         val sender = videoSender ?: return
         val p = sender.parameters
         p.degradationPreference = when (quality.priority) {

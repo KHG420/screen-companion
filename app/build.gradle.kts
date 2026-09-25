@@ -10,8 +10,8 @@ android {
         applicationId = "cn.screenshare.app"
         minSdk = 29
         targetSdk = 35
-        versionCode = 7
-        versionName = "0.4.2"
+        versionCode = 8
+        versionName = "0.4.3"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     buildTypes {

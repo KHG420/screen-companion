@@ -14,6 +14,17 @@ class QualityTest {
         assertEquals(3840,q.longEdge);assertEquals(25,q.fps);assertEquals(17_500_000,q.bitrate)
         assertEquals(1,Quality(fps=1).fps);assertEquals(60,Quality(fps=60).fps)
     }
+    @Test fun uhd60KeepsResolutionAndUsesMotionEncoding() {
+        val q = Quality.UHD60
+        assertEquals(3840 to 2160, q.captureSize(3840,2160))
+        assertEquals(1080 to 1920, q.captureSize(1080,1920))
+        assertEquals(60, q.fps); assertEquals(40_000_000, q.bitrate)
+        assertEquals(VideoPriority.RESOLUTION, q.priority)
+        assertFalse(q.detailContent)
+        assertTrue(Quality.UHD.detailContent)
+        assertFalse(Quality.UHD.copy(fps=31).detailContent)
+        assertFalse(Quality.SMOOTH.detailContent)
+    }
     @Test fun rejectsUnsupportedInputs() {
         listOf<()->Quality>({Quality(fps=0)},{Quality(fps=61)},{Quality(longEdge=3841)},{Quality(shortEdge=0)},{Quality(bitrate=80_000_001)}).forEach {
             try { it();fail("invalid accepted") } catch(_:IllegalArgumentException) {}

@@ -4,7 +4,7 @@
 
 Two-person screen sharing, camera video calls, and text/voice chat for Android and desktop browsers. Create a room, share its eight-digit code, talk, and take turns sharing a screen. The Android client uses Kotlin and Jetpack Compose; the desktop client uses native JavaScript and WebRTC. Both use the same Go signaling service built with the standard library.
 
-Version **0.4.2** is a development and testing release. It does not include accounts, remote control, or recording storage. Screen video, microphone audio, and supported shared media audio travel over WebRTC. HTTP long polling exchanges only SDP, ICE candidates, and sharing state; the signaling server does not forward media. Devices connect directly when possible, with TURN as a fallback. High resolution and low latency are not guaranteed across physical devices and networks.
+Version **0.4.3** is a development and testing release. It does not include accounts, remote control, or recording storage. Screen video, microphone audio, and supported shared media audio travel over WebRTC. HTTP long polling exchanges only SDP, ICE candidates, and sharing state; the signaling server does not forward media. Devices connect directly when possible, with TURN as a fallback. High resolution and low latency are not guaranteed across physical devices and networks.
 
 ## Self-hosting and supported platforms
 
@@ -76,7 +76,9 @@ Presets:
 
 The call screen separates target settings from actual sent/received resolution, FPS, and Mbps, and reports known CPU or bandwidth limitations. These are targets, not guarantees: 4K requires a suitable source and encoder/decoder, while 60 FPS needs changing content and sufficient performance. Both may not be achievable together. Static screens can legitimately use fewer frames and less bitrate. Invalid input is rejected. If a device rejects a combination, the client attempts to restore the previous settings; if restoration fails, screen sharing stops while voice can continue.
 
-Version 0.4.2 uses motion-oriented encoding for Balanced/Frame-rate priority, while Detail priority retains screen-text encoding. Balanced can reduce resolution and/or FPS under load; no fixed quality downgrade is applied. Bitrate-only updates preserve capture constraints. Call statistics show interval averages for encode/decode time per frame, send queue time per packet, and receive buffer time per frame. These are separate pipeline measurements, not end-to-end latency.
+Version 0.4.3 uses motion-oriented encoding for Balanced/Frame-rate priority and targets above 30 FPS; Detail priority at up to 30 FPS retains screen-text encoding. Balanced can reduce resolution and/or FPS under load; no fixed quality downgrade is applied. Bitrate-only updates preserve capture constraints. Call statistics show interval averages for encode/decode time per frame, send queue time per packet, and receive buffer time per frame. These are separate pipeline measurements, not end-to-end latency.
+
+The **4K · 60 FPS** preset targets 3840×2160, 60 FPS and up to 40 Mbps with resolution priority. The capture source must actually provide 4K; upscaling is not used to claim the target. At high FPS, motion encoding and resolution priority are independent: resolution priority remains active even with a motion content hint. Browsers that report smooth H.264 encode/decode capability at 4K60 prefer efficient H.264 profiles when offered, retaining browser ordering between equally capable profiles and other codecs for unsupported peers. Actual performance still depends on both devices and the network. Android exposes High Profile only where the bundled WebRTC hardware factory supports it.
 
 ## Build the Android APK
 

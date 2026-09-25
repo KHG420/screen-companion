@@ -1,25 +1,41 @@
-<!doctype html><meta charset="utf-8"><title>同屏 · 动态媒体性能对照</title>
-<h1>动态媒体性能对照（开发环境）</h1><p>合成 1080p / 30 FPS 画面和音频，使用实际 Call 与 WebRTC。统计不是公网延迟或真机性能承诺。</p>
-<button id="run">运行编解码对照</button><pre id="result">等待开始</pre><video id="view" autoplay muted playsinline width="640"></video>
+<!doctype html><meta charset="utf-8"><title>同屏 · 4K60 媒体性能验证</title>
+<h1>4K60 媒体性能验证（开发环境）</h1>
+<p>真实生成 3840×2160 动态画面，目标 60 FPS / 40 Mbps，经实际 Call 和 WebRTC 传输。分别测量源、发送、解码、呈现；降分辨率不计为达到目标。</p>
+<button id="run">运行 4K60 对照</button><p id="progress">等待开始</p><pre id="result"></pre><video id="view" autoplay muted playsinline width="640"></video>
 <script type="module">
 import {Call,qualities} from '../call.js';
-const wait=ms=>new Promise(r=>setTimeout(r,ms)); const out=document.querySelector('#result');const view=document.querySelector('#view');let timers=[];let source;
-const report=[];let audio;
-navigator.mediaDevices.getUserMedia=async()=>{const dest=audio.createMediaStreamDestination();return dest.stream;};
+const wait=ms=>new Promise(r=>setTimeout(r,ms)),out=document.querySelector('#result'),view=document.querySelector('#view'),progress=document.querySelector('#progress');
+let source,timer,audio,drawn=0,presented=0,presentationCallback;const report={target:{width:3840,height:2160,fps:60,bitrate:40_000_000},capabilities:{},runs:[]};
+navigator.mediaDevices.getUserMedia=async()=>audio.createMediaStreamDestination().stream;
 navigator.mediaDevices.getDisplayMedia=async()=>{
- const c=document.createElement('canvas');c.width=1920;c.height=1080;const ctx=c.getContext('2d');let n=0;
- function draw(){const offset=n*7%80;ctx.fillStyle='#182137';ctx.fillRect(0,0,c.width,c.height);ctx.font='28px sans-serif';
- for(let y=-80;y<1080;y+=80){ctx.fillStyle=y%160?'#23435b':'#426879';ctx.fillRect(0,y+offset,1920,40);ctx.fillStyle='#f2d28d';ctx.fillText('Screen Companion 0123456789 • moving text '.repeat(3),20,y+offset+30);}
- ctx.fillStyle='#ff705e';ctx.fillRect(n*13%1700,450,200,200);ctx.fillStyle='white';ctx.fillText(String(n++),20,100);}
- draw();timers.push(setInterval(draw,1000/30));source=c.captureStream(30);return source;
+ const c=document.createElement('canvas');c.width=3840;c.height=2160;const ctx=c.getContext('2d',{alpha:false});
+ const pattern=document.createElement('canvas');pattern.width=3840;pattern.height=2320;const p=pattern.getContext('2d',{alpha:false});p.font='40px sans-serif';
+ for(let y=0;y<2320;y+=80){p.fillStyle=y%160?'#23435b':'#426879';p.fillRect(0,y,3840,80);p.fillStyle='#f2d28d';p.fillText('Screen Companion · 4K60 · 0123456789  '.repeat(6),20,y+55);}
+ source=c.captureStream(0);const track=source.getVideoTracks()[0];drawn=0;
+ const draw=()=>{ctx.drawImage(pattern,0,-(drawn*7%160));ctx.fillStyle='#ff705e';ctx.fillRect(drawn*19%3400,900,400,400);ctx.fillStyle='white';ctx.font='60px monospace';ctx.fillText(String(drawn++),40,120);track.requestFrame();};
+ let due=performance.now();const tick=()=>{draw();due+=1000/60;if(due<performance.now())due=performance.now()+1000/60;timer=setTimeout(tick,Math.max(0,due-performance.now()));};tick();return source;
 };
 function row(r,type){return [...r.values()].find(s=>s.type===type&&s.kind==='video'&&s.mid==='1');}
-function metrics(a,b,report){const elapsed=(b.timestamp-a.timestamp)/1000;const frames=b.framesEncoded-a.framesEncoded;const codec=report.get(b.codecId);return {codec:codec?.mimeType,encoder:b.encoderImplementation,powerEfficient:b.powerEfficientEncoder,width:b.frameWidth,height:b.frameHeight,fps:frames/elapsed,encodeMs:frames?1000*(b.totalEncodeTime-a.totalEncodeTime)/frames:null,sendQueueMs:1000*(b.totalPacketSendDelay-a.totalPacketSendDelay)/(b.packetsSent-a.packetsSent),limitation:b.qualityLimitationReason};}
-async function run(codec){let h,g;
- try {h=new Call('/api');await h.start();if(codec){const codecs=RTCRtpSender.getCapabilities('video').codecs;h.video.setCodecPreferences([...codecs.filter(c=>c.mimeType===codec),...codecs.filter(c=>c.mimeType!==codec)]);}
- g=new Call('/api',s=>{if(s.remoteVideo&&view.srcObject?.getVideoTracks()[0]!==s.remoteVideo)view.srcObject=new MediaStream([s.remoteVideo]);});await g.start(h.state.roomId);
- for(let i=0;i<100&&!h.state.connected;i++)await wait(100);if(!h.state.connected)throw Error('Connection timeout');
- await h.share();await wait(5000);const a=await h.pc.getStats();await wait(15000);const b=await h.pc.getStats();const recv=await g.pc.getStats();const result=metrics(row(a,'outbound-rtp'),row(b,'outbound-rtp'),b);result.requested=codec||'default';result.receiver=row(recv,'inbound-rtp');report.push(result);out.textContent=JSON.stringify(report,null,2);
- }finally{h?.end();g?.end();timers.forEach(clearInterval);timers=[];source?.getTracks().forEach(t=>t.stop());view.srcObject=null;}}
-document.querySelector('#run').onclick=async()=>{document.querySelector('#run').disabled=true;audio=new AudioContext();await audio.resume();try{await run(null);if(RTCRtpSender.getCapabilities('video').codecs.some(c=>c.mimeType==='video/H264'))await run('video/H264');document.body.dataset.done='true';}catch(e){out.textContent+='\nERROR '+e.stack;document.body.dataset.done='error';}finally{await audio.close();document.querySelector('#run').disabled=false;}};
+function delta(a,b,key){return Number.isFinite(a?.[key])&&Number.isFinite(b?.[key])?b[key]-a[key]:null;}
+function average(a,b,total,count){const t=delta(a,b,total),n=delta(a,b,count);return t!==null&&t>=0&&n>0?t*1000/n:null;}
+function metrics(a,b,type,stats){if(!a||!b)throw Error('No media frames: the test source may be throttled by the browser');const dt=(b.timestamp-a.timestamp)/1000;const count=type==='outbound-rtp'?'framesEncoded':'framesDecoded';return {width:b.frameWidth,height:b.frameHeight,fps:delta(a,b,count)/dt,codec:stats.get(b.codecId)?.mimeType,format:stats.get(b.codecId)?.sdpFmtpLine,implementation:b.encoderImplementation||b.decoderImplementation,powerEfficient:b.powerEfficientEncoder??b.powerEfficientDecoder,encodeMs:average(a,b,'totalEncodeTime','framesEncoded'),decodeMs:average(a,b,'totalDecodeTime','framesDecoded'),sendQueueMs:average(a,b,'totalPacketSendDelay','packetsSent'),bufferMs:average(a,b,'jitterBufferDelay','jitterBufferEmittedCount'),freezes:delta(a,b,'freezeCount'),limitation:b.qualityLimitationReason,mbps:8*delta(a,b,type==='outbound-rtp'?'bytesSent':'bytesReceived')/dt/1e6};}
+function countPresented(){presentationCallback=view.requestVideoFrameCallback((_,metadata)=>{presented=metadata.presentedFrames;countPresented();});}
+async function run(codec,hint,profile=null){let h,g;const result={requested:(codec||'default')+(profile?' profile '+profile:''),hint,samples:[]};progress.textContent=`测试 ${result.requested} / ${hint}`;
+ try{
+ const configure=async video=>{const codecs=RTCRtpSender.getCapabilities('video').codecs;const preferred=c=>c.mimeType===codec&&(!profile||new RegExp('profile-level-id='+profile,'i').test(c.sdpFmtpLine||''));video.setCodecPreferences([...codecs.filter(preferred),...codecs.filter(c=>!preferred(c))]);};
+ h=new Call('/api');if(codec)h.configureScreenCodecs=configure;await h.start();
+ g=new Call('/api',s=>{if(s.remoteVideo&&view.srcObject?.getVideoTracks()[0]!==s.remoteVideo)view.srcObject=new MediaStream([s.remoteVideo]);});if(codec)g.configureScreenCodecs=configure;await g.start(h.state.roomId);
+ for(let i=0;i<150&&!h.state.connected;i++)await wait(100);if(!h.state.connected)throw Error('Connection timeout');
+ await h.quality({...qualities.uhd,fps:60,bitrate:40_000_000});await h.share();source.getVideoTracks()[0].contentHint=hint;
+ if(view.requestVideoFrameCallback)countPresented();await wait(15000);
+ let a=await h.pc.getStats(),ra=await g.pc.getStats(),at=performance.now(),ad=drawn,ap=presented,aq=view.getVideoPlaybackQuality();
+ for(let i=0;i<10;i++){await wait(3000);const b=await h.pc.getStats(),rb=await g.pc.getStats(),now=performance.now();const sa=a.get(row(a,'outbound-rtp').mediaSourceId),sb=b.get(row(b,'outbound-rtp').mediaSourceId);result.samples.push({drawFps:(drawn-ad)*1000/(now-at),captureFps:delta(sa,sb,'frames')*1000/(now-at),presentedFps:(presented-ap)*1000/(now-at),renderDrops:view.getVideoPlaybackQuality().droppedVideoFrames-aq.droppedVideoFrames,sent:metrics(row(a,'outbound-rtp'),row(b,'outbound-rtp'),'outbound-rtp',b),received:metrics(row(ra,'inbound-rtp'),row(rb,'inbound-rtp'),'inbound-rtp',rb)});a=b;ra=rb;at=now;ad=drawn;ap=presented;aq=view.getVideoPlaybackQuality();}
+ result.near4k60=result.samples.every(s=>s.sent.width===3840&&s.sent.height===2160&&s.received.width===3840&&s.received.height===2160&&s.sent.fps>=57&&s.received.fps>=57&&s.presentedFps>=57);report.runs.push(result);out.textContent=JSON.stringify(report,null,2);
+ }finally{h?.end();g?.end();clearTimeout(timer);source?.getTracks().forEach(t=>t.stop());if(presentationCallback)view.cancelVideoFrameCallback(presentationCallback);view.srcObject=null;}}
+document.querySelector('#run').onclick=async()=>{
+ document.querySelector('#run').disabled=true;delete document.body.dataset.done;report.runs=[];audio=new AudioContext();await audio.resume();
+ try{for(const codec of ['video/VP8','video/H264','video/VP9','video/H265']){try{report.capabilities[codec]=await navigator.mediaCapabilities.encodingInfo({type:'webrtc',video:{contentType:codec,width:3840,height:2160,bitrate:40_000_000,framerate:60}});}catch(e){report.capabilities[codec]={error:e.message};}}
+ out.textContent=JSON.stringify(report,null,2);await run(null,'motion');progress.textContent='完成；near4k60 要求每个采样同时为 4K 且发送/接收/呈现 ≥57 FPS，仅为接近目标判据。';document.body.dataset.done='true';
+ }catch(e){out.textContent+='\nERROR '+e.stack;document.body.dataset.done='error';}finally{await audio.close();document.querySelector('#run').disabled=false;}
+};
 </script>

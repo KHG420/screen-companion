@@ -7,6 +7,7 @@ export const qualities = {
   clear: { width: 2560, height: 1440, fps: 24, bitrate: 12_000_000, priority: 'maintain-resolution' },
   smooth: { width: 1920, height: 1080, fps: 60, bitrate: 10_000_000, priority: 'maintain-framerate' },
   uhd: { width: 3840, height: 2160, fps: 30, bitrate: 24_000_000, priority: 'maintain-resolution' },
+  uhd60: { width: 3840, height: 2160, fps: 60, bitrate: 40_000_000, priority: 'maintain-resolution' },
 };
 export function validateQuality(q) {
   if (!q || !Number.isInteger(q.width) || !Number.isInteger(q.height) ||
@@ -95,6 +96,8 @@ export class Call {
       this.pc.addTrack(this.mix.stream.getAudioTracks()[0], this.mix.stream);
       if (this.credentials.role === 'host') {
         this.video = this.pc.addTransceiver('video', { direction: 'sendrecv' });
+        await this.configureScreenCodecs(this.video);
+        if (this.closed) return;
         this.cameraVideo = this.pc.addTransceiver('video', { direction: 'sendrecv' });
         this.bindChannel(this.pc.createDataChannel('companion-v1', { ordered:true }));
       }
@@ -110,6 +113,33 @@ export class Call {
       if (this.credentials.role === 'guest') this.armDeadline();
       this.poll(); this.statsTimer = setInterval(() => this.stats(), 3000);
     } catch (error) { if (!this.closed) this.fail(friendly(error)); }
+  }
+  async configureScreenCodecs(video) {
+    // Probe the actual 4K60 workload before changing the browser's default order.
+    // Keep every offered codec: unsupported peers can still negotiate a fallback.
+    if (!video.setCodecPreferences || !globalThis.RTCRtpSender?.getCapabilities || !navigator.mediaCapabilities?.encodingInfo || !navigator.mediaCapabilities?.decodingInfo) return;
+    try {
+      if (!this.screenCodecs) this.screenCodecs = (async () => {
+        const codecs = RTCRtpSender.getCapabilities('video')?.codecs || [];
+        const candidates=codecs.filter(c=>c.mimeType.toLowerCase()==='video/h264' && /(?:^|;)\s*packetization-mode=1(?:;|$)/i.test(c.sdpFmtpLine || ''));
+        const usable=(await Promise.all(candidates.map(async codec=>{
+          try {
+            // A bare video/H264 probe can describe software Baseline while the
+            // explicitly offered High profile is hardware accelerated.
+            const config={type:'webrtc',video:{contentType:codec.mimeType+';'+codec.sdpFmtpLine,width:3840,height:2160,bitrate:40_000_000,framerate:60}};
+            const [encode,decode]=await Promise.all([navigator.mediaCapabilities.encodingInfo(config),navigator.mediaCapabilities.decodingInfo(config)]);
+            return encode.supported && encode.smooth && decode.supported && decode.smooth ? {codec,efficient:!!encode.powerEfficient && !!decode.powerEfficient} : null;
+          } catch { return null; }
+        }))).filter(Boolean);
+        if (!usable.length) return null;
+        // Among equally capable hardware profiles, preserve the browser's own order.
+        usable.sort((a,b)=>Number(b.efficient)-Number(a.efficient));
+        const preferred=usable.map(x=>x.codec);
+        return [...preferred,...codecs.filter(c=>!preferred.includes(c))];
+      })();
+      const codecs=await this.screenCodecs;
+      if (!this.closed && codecs) video.setCodecPreferences(codecs);
+    } catch { /* Capability probing and optional codec preferences must not prevent a call. */ }
   }
   signal(type, data) {
     const id = crypto.randomUUID();
@@ -145,6 +175,8 @@ export class Call {
         this.video = this.pc.getTransceivers().find(t => t.receiver.track.kind === 'video');
         if (!this.video) throw new Error('对方未提供屏幕通道，请更新客户端。');
         this.video.direction = 'sendrecv';
+        await this.configureScreenCodecs(this.video);
+        if (this.closed) return;
         this.cameraVideo = this.pc.getTransceivers().filter(t => t.receiver.track.kind === 'video')[1];
         if (this.cameraVideo) this.cameraVideo.direction = 'sendrecv';
         await this.flushIce();
@@ -290,14 +322,14 @@ export class Call {
       const bounds = captureBounds(q, track.getSettings());
       // A detail hint makes libwebrtc treat BALANCED as MAINTAIN_RESOLUTION.
       // Motion content keeps the explicitly selected adaptation policy effective.
-      track.contentHint = q.priority === 'maintain-resolution' ? 'detail' : 'motion';
+      track.contentHint = q.priority === 'maintain-resolution' && q.fps <= 30 ? 'detail' : 'motion';
       const next = { width:{ideal:bounds.width,max:bounds.width}, height:{ideal:bounds.height,max:bounds.height}, frameRate:{ideal:q.fps,max:q.fps} };
       const current = track.getConstraints();
       if (Object.keys(next).some(key => current[key]?.ideal !== next[key].ideal || current[key]?.max !== next[key].max)) {
         await track.applyConstraints(next);
       }
     }
-    if (this.video?.sender.track) {
+    if (this.video?.sender) {
       const p = this.video.sender.getParameters();
       p.degradationPreference = q.priority;
       for (const encoding of p.encodings || []) { encoding.maxBitrate=q.bitrate; encoding.maxFramerate=q.fps;
@@ -319,11 +351,14 @@ export class Call {
       this.display = capture;
       const track = capture.getVideoTracks()[0];
       if (track.readyState === 'ended') throw new Error('屏幕共享已取消，请重新选择。');
+      // Configure capture and negotiated sender limits before the first frame is attached.
+      await this.encoding();
+      if (this.closed) return;
+      if (track.readyState === 'ended') throw new Error('屏幕共享已取消，请重新选择。');
       await this.video.sender.replaceTrack(track);
       const sound = capture.getAudioTracks();
       if (sound.length) { this.displaySource = this.audio.createMediaStreamSource(new MediaStream(sound)); this.displaySource.connect(this.mix); }
       track.onended = () => this.stopSharing();
-      await this.encoding();
       this.update({ sharing: true, localVideo: track, systemAudio: sound.length > 0, busy: false, qualityNote:this.captureNote(this.state.quality) });
     } catch (error) {
       capture?.getTracks().forEach(t => t.stop()); this.stopCapture();

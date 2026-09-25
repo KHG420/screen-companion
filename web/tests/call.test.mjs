@@ -123,3 +123,35 @@ test('timing reports interval averages and ignores missing/reset counters',async
   assert.equal(videoTiming({...a,timestamp:5000},b),'');assert.equal(videoTiming(a), '');assert.equal(videoTiming(a,a),'');
   assert.equal(videoTiming({type:'inbound-rtp',timestamp:2000,framesDecoded:20,totalDecodeTime:.2,jitterBufferEmittedCount:20,jitterBufferDelay:1,freezeCount:1}, {timestamp:1000,framesDecoded:10,totalDecodeTime:.1,jitterBufferEmittedCount:10,jitterBufferDelay:.5,freezeCount:0}), '解码/帧 10 ms · 接收缓冲/帧 50 ms · 本周期冻结 1 次');
 });
+
+test('4K60 applies motion capture and sender limits before attaching the first screen frame', async()=>{
+  const {qualities}=await import('../call.js');const old=Object.getOwnPropertyDescriptor(globalThis,'navigator');let constraints,parameters;const order=[];
+  const track={readyState:'live',getSettings:()=>({width:3840,height:2160}),getConstraints:()=>constraints||{},applyConstraints:async p=>{constraints=p;order.push('capture');},stop(){}};
+  const stream={getVideoTracks:()=>[track],getAudioTracks:()=>[],getTracks:()=>[track]};
+  Object.defineProperty(globalThis,'navigator',{configurable:true,value:{mediaDevices:{getDisplayMedia:async()=>stream}}});
+  try{
+    const c=new Call('/api');c.credentials={roomId:'12345678'};c.state.connected=true;c.request=async()=>({});
+    c.video={sender:{track:null,getParameters:()=>({encodings:[{}]}),setParameters:async p=>{parameters=p;order.push('sender');},replaceTrack:async t=>{assert.equal(t,track);order.push('attach');}}};
+    await c.quality('uhd60');await c.share();assert.equal(c.state.sharing,true);
+    assert.deepEqual(order,['capture','sender','attach']);assert.equal(track.contentHint,'motion');assert.equal(constraints.width.max,3840);assert.equal(constraints.height.max,2160);assert.equal(constraints.frameRate.max,60);
+    assert.equal(parameters.degradationPreference,'maintain-resolution');assert.equal(parameters.encodings[0].maxFramerate,60);assert.equal(parameters.encodings[0].maxBitrate,40_000_000);assert.equal(qualities.uhd.fps,30);
+  }finally{if(old)Object.defineProperty(globalThis,'navigator',old);else delete globalThis.navigator;}
+});
+
+test('capable browsers prefer an efficient H264 profile while preserving fallbacks and caching the probe',async()=>{
+  const old=Object.getOwnPropertyDescriptor(globalThis,'navigator'),oldSender=globalThis.RTCRtpSender;
+  const codecs=[{mimeType:'video/VP8'},{mimeType:'video/H264',sdpFmtpLine:'packetization-mode=1;profile-level-id=42e01f'},{mimeType:'video/rtx'},{mimeType:'video/H264',sdpFmtpLine:'level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=640034'}];let probes=0,preferred;
+  globalThis.RTCRtpSender={getCapabilities:()=>({codecs})};Object.defineProperty(globalThis,'navigator',{configurable:true,value:{mediaCapabilities:{encodingInfo:async q=>{probes++;assert.equal(q.video.framerate,60);assert.equal(q.video.width,3840);return {supported:true,smooth:true,powerEfficient:q.video.contentType.includes('640034')};},decodingInfo:async()=>({supported:true,smooth:true,powerEfficient:true})}}});
+  try{const c=new Call('/api');const video={setCodecPreferences:p=>preferred=p};await c.configureScreenCodecs(video);await c.configureScreenCodecs(video);assert.equal(probes,2);assert.deepEqual(preferred,[codecs[3],codecs[1],codecs[0],codecs[2]]);assert.equal(codecs[0].mimeType,'video/VP8');}
+  finally{globalThis.RTCRtpSender=oldSender;if(old)Object.defineProperty(globalThis,'navigator',old);else delete globalThis.navigator;}
+});
+
+test('unsupported capability probes and hangup during probing preserve call fallback',async()=>{
+  const old=Object.getOwnPropertyDescriptor(globalThis,'navigator'),oldSender=globalThis.RTCRtpSender;let set=0,resolve;
+  globalThis.RTCRtpSender={getCapabilities:()=>({codecs:[{mimeType:'video/H264',sdpFmtpLine:'packetization-mode=1;profile-level-id=42e01f'}]})};const capabilities={encodingInfo:async()=>({supported:true,smooth:false}),decodingInfo:async()=>({supported:true,smooth:true})};
+  Object.defineProperty(globalThis,'navigator',{configurable:true,value:{mediaCapabilities:capabilities}});
+  try{const video={setCodecPreferences:()=>set++};await new Call('/api').configureScreenCodecs(video);assert.equal(set,0);
+    capabilities.encodingInfo=async()=>{throw Error('unsupported')};await new Call('/api').configureScreenCodecs(video);assert.equal(set,0);
+    capabilities.encodingInfo=()=>new Promise(r=>resolve=r);const c=new Call('/api');const pending=c.configureScreenCodecs(video);c.end();resolve({supported:true,smooth:true});await pending;assert.equal(set,0);
+  }finally{globalThis.RTCRtpSender=oldSender;if(old)Object.defineProperty(globalThis,'navigator',old);else delete globalThis.navigator;}
+});

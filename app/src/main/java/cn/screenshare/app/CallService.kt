@@ -20,6 +20,7 @@ data class Quality(
         require(fps in 1..60) { "帧率需为 1–60 的整数" }
         require(bitrate in 500_000..80_000_000) { "码率上限需为 0.5–80 Mbps" }
     }
+    val detailContent: Boolean get() = priority == VideoPriority.RESOLUTION && fps <= 30
     val label: String get() = "${longEdge}×${shortEdge} · ${fps} FPS"
     fun captureSize(width: Int, height: Int): Pair<Int, Int> {
         val w = width.coerceAtLeast(2); val h = height.coerceAtLeast(2)
@@ -31,7 +32,8 @@ data class Quality(
         val CLEAR = Quality(2560,1440,24,12_000_000,VideoPriority.RESOLUTION)
         val SMOOTH = Quality(1920,1080,60,10_000_000,VideoPriority.FRAMERATE)
         val UHD = Quality(3840,2160,30,24_000_000,VideoPriority.RESOLUTION)
-        val presets = listOf("均衡" to AUTO, "文字清晰" to CLEAR, "动态流畅" to SMOOTH, "4K 超清" to UHD)
+        val UHD60 = Quality(3840,2160,60,40_000_000,VideoPriority.RESOLUTION)
+        val presets = listOf("均衡" to AUTO, "文字清晰" to CLEAR, "动态流畅" to SMOOTH, "4K 超清" to UHD, "4K · 60 帧" to UHD60)
     }
 }
 data class ChatMessage(val text: String, val mine: Boolean)
