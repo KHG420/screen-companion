@@ -115,28 +115,34 @@ export class Call {
     } catch (error) { if (!this.closed) this.fail(friendly(error)); }
   }
   async configureScreenCodecs(video) {
-    // Probe the actual 4K60 workload before changing the browser's default order.
+    // Probe the negotiated quality, so lower-power devices need not support 4K60
+    // to use efficient encoding at 720p/1080p. Live quality changes keep the codec.
     // Keep every offered codec: unsupported peers can still negotiate a fallback.
     if (!video.setCodecPreferences || !globalThis.RTCRtpSender?.getCapabilities || !navigator.mediaCapabilities?.encodingInfo || !navigator.mediaCapabilities?.decodingInfo) return;
     try {
-      if (!this.screenCodecs) this.screenCodecs = (async () => {
-        const codecs = RTCRtpSender.getCapabilities('video')?.codecs || [];
-        const candidates=codecs.filter(c=>c.mimeType.toLowerCase()==='video/h264' && /(?:^|;)\s*packetization-mode=1(?:;|$)/i.test(c.sdpFmtpLine || ''));
-        const usable=(await Promise.all(candidates.map(async codec=>{
-          try {
-            // A bare video/H264 probe can describe software Baseline while the
-            // explicitly offered High profile is hardware accelerated.
-            const config={type:'webrtc',video:{contentType:codec.mimeType+';'+codec.sdpFmtpLine,width:3840,height:2160,bitrate:40_000_000,framerate:60}};
-            const [encode,decode]=await Promise.all([navigator.mediaCapabilities.encodingInfo(config),navigator.mediaCapabilities.decodingInfo(config)]);
-            return encode.supported && encode.smooth && decode.supported && decode.smooth ? {codec,efficient:!!encode.powerEfficient && !!decode.powerEfficient} : null;
-          } catch { return null; }
-        }))).filter(Boolean);
-        if (!usable.length) return null;
-        // Among equally capable hardware profiles, preserve the browser's own order.
-        usable.sort((a,b)=>Number(b.efficient)-Number(a.efficient));
-        const preferred=usable.map(x=>x.codec);
-        return [...preferred,...codecs.filter(c=>!preferred.includes(c))];
-      })();
+      const {width,height,fps,bitrate}=this.state.quality;
+      const key=`${width}/${height}/${fps}/${bitrate}`;
+      if (!this.screenCodecs || this.screenCodecQuality !== key) {
+        this.screenCodecQuality=key;
+        this.screenCodecs = (async () => {
+          const codecs = RTCRtpSender.getCapabilities('video')?.codecs || [];
+          const candidates=codecs.filter(c=>c.mimeType.toLowerCase()==='video/h264' && /(?:^|;)\s*packetization-mode=1(?:;|$)/i.test(c.sdpFmtpLine || ''));
+          const usable=(await Promise.all(candidates.map(async codec=>{
+            try {
+              // A bare video/H264 probe can describe software Baseline while the
+              // explicitly offered High profile is hardware accelerated.
+              const config={type:'webrtc',video:{contentType:codec.mimeType+';'+codec.sdpFmtpLine,width,height,bitrate,framerate:fps}};
+              const [encode,decode]=await Promise.all([navigator.mediaCapabilities.encodingInfo(config),navigator.mediaCapabilities.decodingInfo(config)]);
+              return encode.supported && encode.smooth && decode.supported && decode.smooth ? {codec,efficient:!!encode.powerEfficient && !!decode.powerEfficient} : null;
+            } catch { return null; }
+          }))).filter(Boolean);
+          if (!usable.length) return null;
+          // Among equally capable hardware profiles, preserve the browser's own order.
+          usable.sort((a,b)=>Number(b.efficient)-Number(a.efficient));
+          const preferred=usable.map(x=>x.codec);
+          return [...preferred,...codecs.filter(c=>!preferred.includes(c))];
+        })();
+      }
       const codecs=await this.screenCodecs;
       if (!this.closed && codecs) video.setCodecPreferences(codecs);
     } catch { /* Capability probing and optional codec preferences must not prevent a call. */ }

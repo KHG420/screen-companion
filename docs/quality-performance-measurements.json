@@ -1,0 +1,3115 @@
+{
+  "environment": "Apple M4 / Chrome 153, same machine sending and receiving, existing user browser and applications retained",
+  "dynamicSampling": {
+    "warmupSeconds": 8,
+    "windows": 3,
+    "windowSeconds": 3
+  },
+  "switchSampling": {
+    "warmupSeconds": 4,
+    "windows": 2,
+    "windowSeconds": 3
+  },
+  "criterion": "Every sampled window preserves target send/receive size and send/decode/presentation FPS >= 95% of target; not applied to static input.",
+  "matrix": [
+    {
+      "label": "180p/15",
+      "target": {
+        "width": 320,
+        "height": 180,
+        "fps": 15,
+        "bitrate": 500000,
+        "priority": "maintain-resolution"
+      },
+      "nearTarget": true,
+      "connected": true,
+      "sent": {
+        "sizes": [
+          "320x180"
+        ],
+        "fps": {
+          "mean": 14.972,
+          "min": 14.964,
+          "max": 14.984
+        },
+        "mbps": {
+          "mean": 0.347,
+          "min": 0.344,
+          "max": 0.349
+        },
+        "encodeMs": {
+          "mean": 2.807,
+          "min": 2.644,
+          "max": 2.956
+        },
+        "queueMs": {
+          "mean": 0.089,
+          "min": 0.001,
+          "max": 0.137
+        },
+        "limitations": [
+          "none"
+        ]
+      },
+      "received": {
+        "sizes": [
+          "320x180"
+        ],
+        "fps": {
+          "mean": 14.972,
+          "min": 14.96,
+          "max": 14.988
+        },
+        "mbps": {
+          "mean": 0.347,
+          "min": 0.344,
+          "max": 0.349
+        },
+        "decodeMs": {
+          "mean": 2.384,
+          "min": 2.184,
+          "max": 2.538
+        },
+        "bufferMs": {
+          "mean": 16.916,
+          "min": 14.59,
+          "max": 18.617
+        },
+        "limitations": []
+      },
+      "presentedFps": {
+        "mean": 15.083,
+        "min": 14.968,
+        "max": 15.291
+      },
+      "renderDrops": 0
+    },
+    {
+      "label": "180p/30",
+      "target": {
+        "width": 320,
+        "height": 180,
+        "fps": 30,
+        "bitrate": 500000,
+        "priority": "maintain-resolution"
+      },
+      "nearTarget": true,
+      "connected": true,
+      "sent": {
+        "sizes": [
+          "320x180"
+        ],
+        "fps": {
+          "mean": 30.057,
+          "min": 29.953,
+          "max": 30.262
+        },
+        "mbps": {
+          "mean": 0.5,
+          "min": 0.498,
+          "max": 0.502
+        },
+        "encodeMs": {
+          "mean": 2.963,
+          "min": 2.867,
+          "max": 3.099
+        },
+        "queueMs": {
+          "mean": 0.015,
+          "min": 0.002,
+          "max": 0.026
+        },
+        "limitations": [
+          "none"
+        ]
+      },
+      "received": {
+        "sizes": [
+          "320x180"
+        ],
+        "fps": {
+          "mean": 30.057,
+          "min": 29.929,
+          "max": 30.287
+        },
+        "mbps": {
+          "mean": 0.5,
+          "min": 0.499,
+          "max": 0.502
+        },
+        "decodeMs": {
+          "mean": 1.294,
+          "min": 1.27,
+          "max": 1.318
+        },
+        "bufferMs": {
+          "mean": 8.789,
+          "min": 8.392,
+          "max": 9.103
+        },
+        "limitations": []
+      },
+      "presentedFps": {
+        "mean": 30.072,
+        "min": 29.62,
+        "max": 30.311
+      },
+      "renderDrops": 0
+    },
+    {
+      "label": "180p/60",
+      "target": {
+        "width": 320,
+        "height": 180,
+        "fps": 60,
+        "bitrate": 500000,
+        "priority": "maintain-resolution"
+      },
+      "nearTarget": false,
+      "connected": true,
+      "sent": {
+        "sizes": [
+          "320x180"
+        ],
+        "fps": {
+          "mean": 37.822,
+          "min": 37.536,
+          "max": 37.966
+        },
+        "mbps": {
+          "mean": 0.504,
+          "min": 0.491,
+          "max": 0.513
+        },
+        "encodeMs": {
+          "mean": 1.129,
+          "min": 1.018,
+          "max": 1.298
+        },
+        "queueMs": {
+          "mean": 15.7,
+          "min": 15.072,
+          "max": 16.059
+        },
+        "limitations": [
+          "none"
+        ]
+      },
+      "received": {
+        "sizes": [
+          "320x180"
+        ],
+        "fps": {
+          "mean": 37.822,
+          "min": 37.634,
+          "max": 37.963
+        },
+        "mbps": {
+          "mean": 0.504,
+          "min": 0.491,
+          "max": 0.513
+        },
+        "decodeMs": {
+          "mean": 1.55,
+          "min": 1.467,
+          "max": 1.71
+        },
+        "bufferMs": {
+          "mean": 39.928,
+          "min": 38.967,
+          "max": 41.637
+        },
+        "limitations": []
+      },
+      "presentedFps": {
+        "mean": 33.718,
+        "min": 33.551,
+        "max": 33.966
+      },
+      "renderDrops": 37
+    },
+    {
+      "label": "360p/15",
+      "target": {
+        "width": 640,
+        "height": 360,
+        "fps": 15,
+        "bitrate": 1000000,
+        "priority": "maintain-resolution"
+      },
+      "nearTarget": true,
+      "connected": true,
+      "sent": {
+        "sizes": [
+          "640x360"
+        ],
+        "fps": {
+          "mean": 14.977,
+          "min": 14.974,
+          "max": 14.983
+        },
+        "mbps": {
+          "mean": 1.001,
+          "min": 0.962,
+          "max": 1.043
+        },
+        "encodeMs": {
+          "mean": 4.0,
+          "min": 3.733,
+          "max": 4.156
+        },
+        "queueMs": {
+          "mean": 4.838,
+          "min": 2.615,
+          "max": 7.421
+        },
+        "limitations": [
+          "none"
+        ]
+      },
+      "received": {
+        "sizes": [
+          "640x360"
+        ],
+        "fps": {
+          "mean": 14.978,
+          "min": 14.974,
+          "max": 14.984
+        },
+        "mbps": {
+          "mean": 1.001,
+          "min": 0.962,
+          "max": 1.043
+        },
+        "decodeMs": {
+          "mean": 2.697,
+          "min": 2.5,
+          "max": 2.801
+        },
+        "bufferMs": {
+          "mean": 109.062,
+          "min": 105.008,
+          "max": 111.624
+        },
+        "limitations": []
+      },
+      "presentedFps": {
+        "mean": 14.978,
+        "min": 14.973,
+        "max": 14.985
+      },
+      "renderDrops": 0
+    },
+    {
+      "label": "360p/30",
+      "target": {
+        "width": 640,
+        "height": 360,
+        "fps": 30,
+        "bitrate": 1000000,
+        "priority": "maintain-resolution"
+      },
+      "nearTarget": true,
+      "connected": true,
+      "sent": {
+        "sizes": [
+          "640x360"
+        ],
+        "fps": {
+          "mean": 30.075,
+          "min": 29.945,
+          "max": 30.303
+        },
+        "mbps": {
+          "mean": 1.0,
+          "min": 0.981,
+          "max": 1.029
+        },
+        "encodeMs": {
+          "mean": 3.162,
+          "min": 3.033,
+          "max": 3.319
+        },
+        "queueMs": {
+          "mean": 0.173,
+          "min": 0.001,
+          "max": 0.324
+        },
+        "limitations": [
+          "none"
+        ]
+      },
+      "received": {
+        "sizes": [
+          "640x360"
+        ],
+        "fps": {
+          "mean": 29.962,
+          "min": 29.94,
+          "max": 29.973
+        },
+        "mbps": {
+          "mean": 1.0,
+          "min": 0.981,
+          "max": 1.029
+        },
+        "decodeMs": {
+          "mean": 1.481,
+          "min": 1.428,
+          "max": 1.552
+        },
+        "bufferMs": {
+          "mean": 13.597,
+          "min": 11.781,
+          "max": 15.344
+        },
+        "limitations": []
+      },
+      "presentedFps": {
+        "mean": 29.849,
+        "min": 29.639,
+        "max": 29.971
+      },
+      "renderDrops": 1
+    },
+    {
+      "label": "360p/60",
+      "target": {
+        "width": 640,
+        "height": 360,
+        "fps": 60,
+        "bitrate": 1000000,
+        "priority": "maintain-resolution"
+      },
+      "nearTarget": false,
+      "connected": true,
+      "sent": {
+        "sizes": [
+          "640x360"
+        ],
+        "fps": {
+          "mean": 59.887,
+          "min": 59.633,
+          "max": 60.076
+        },
+        "mbps": {
+          "mean": 1.001,
+          "min": 0.993,
+          "max": 1.009
+        },
+        "encodeMs": {
+          "mean": 3.202,
+          "min": 3.177,
+          "max": 3.251
+        },
+        "queueMs": {
+          "mean": 0.002,
+          "min": 0.001,
+          "max": 0.002
+        },
+        "limitations": [
+          "none"
+        ]
+      },
+      "received": {
+        "sizes": [
+          "640x360"
+        ],
+        "fps": {
+          "mean": 59.998,
+          "min": 59.957,
+          "max": 60.079
+        },
+        "mbps": {
+          "mean": 1.001,
+          "min": 0.993,
+          "max": 1.01
+        },
+        "decodeMs": {
+          "mean": 1.297,
+          "min": 1.287,
+          "max": 1.31
+        },
+        "bufferMs": {
+          "mean": 9.63,
+          "min": 9.273,
+          "max": 10.179
+        },
+        "limitations": []
+      },
+      "presentedFps": {
+        "mean": 57.557,
+        "min": 56.962,
+        "max": 58.099
+      },
+      "renderDrops": 21
+    },
+    {
+      "label": "720p/15",
+      "target": {
+        "width": 1280,
+        "height": 720,
+        "fps": 15,
+        "bitrate": 4000000,
+        "priority": "maintain-resolution"
+      },
+      "nearTarget": true,
+      "connected": true,
+      "sent": {
+        "sizes": [
+          "1280x720"
+        ],
+        "fps": {
+          "mean": 15.088,
+          "min": 14.969,
+          "max": 15.316
+        },
+        "mbps": {
+          "mean": 3.974,
+          "min": 3.904,
+          "max": 4.02
+        },
+        "encodeMs": {
+          "mean": 6.823,
+          "min": 6.667,
+          "max": 6.913
+        },
+        "queueMs": {
+          "mean": 14.011,
+          "min": 13.889,
+          "max": 14.221
+        },
+        "limitations": [
+          "none"
+        ]
+      },
+      "received": {
+        "sizes": [
+          "1280x720"
+        ],
+        "fps": {
+          "mean": 15.088,
+          "min": 14.963,
+          "max": 15.319
+        },
+        "mbps": {
+          "mean": 3.974,
+          "min": 3.904,
+          "max": 4.018
+        },
+        "decodeMs": {
+          "mean": 2.534,
+          "min": 2.469,
+          "max": 2.619
+        },
+        "bufferMs": {
+          "mean": 130.768,
+          "min": 129.29,
+          "max": 132.496
+        },
+        "limitations": []
+      },
+      "presentedFps": {
+        "mean": 14.978,
+        "min": 14.962,
+        "max": 14.989
+      },
+      "renderDrops": 0
+    },
+    {
+      "label": "720p/30",
+      "target": {
+        "width": 1280,
+        "height": 720,
+        "fps": 30,
+        "bitrate": 4000000,
+        "priority": "maintain-resolution"
+      },
+      "nearTarget": true,
+      "connected": true,
+      "sent": {
+        "sizes": [
+          "1280x720"
+        ],
+        "fps": {
+          "mean": 29.974,
+          "min": 29.966,
+          "max": 29.982
+        },
+        "mbps": {
+          "mean": 4.02,
+          "min": 3.968,
+          "max": 4.056
+        },
+        "encodeMs": {
+          "mean": 5.715,
+          "min": 5.511,
+          "max": 5.933
+        },
+        "queueMs": {
+          "mean": 4.809,
+          "min": 3.543,
+          "max": 6.585
+        },
+        "limitations": [
+          "none"
+        ]
+      },
+      "received": {
+        "sizes": [
+          "1280x720"
+        ],
+        "fps": {
+          "mean": 29.973,
+          "min": 29.964,
+          "max": 29.979
+        },
+        "mbps": {
+          "mean": 4.02,
+          "min": 3.967,
+          "max": 4.057
+        },
+        "decodeMs": {
+          "mean": 1.738,
+          "min": 1.697,
+          "max": 1.791
+        },
+        "bufferMs": {
+          "mean": 86.388,
+          "min": 85.46,
+          "max": 87.793
+        },
+        "limitations": []
+      },
+      "presentedFps": {
+        "mean": 29.973,
+        "min": 29.63,
+        "max": 30.308
+      },
+      "renderDrops": 0
+    },
+    {
+      "label": "720p/60",
+      "target": {
+        "width": 1280,
+        "height": 720,
+        "fps": 60,
+        "bitrate": 4000000,
+        "priority": "maintain-resolution"
+      },
+      "nearTarget": true,
+      "connected": true,
+      "sent": {
+        "sizes": [
+          "1280x720"
+        ],
+        "fps": {
+          "mean": 59.956,
+          "min": 59.949,
+          "max": 59.963
+        },
+        "mbps": {
+          "mean": 4.0,
+          "min": 3.986,
+          "max": 4.01
+        },
+        "encodeMs": {
+          "mean": 4.843,
+          "min": 4.75,
+          "max": 4.894
+        },
+        "queueMs": {
+          "mean": 0.001,
+          "min": 0.001,
+          "max": 0.001
+        },
+        "limitations": [
+          "none"
+        ]
+      },
+      "received": {
+        "sizes": [
+          "1280x720"
+        ],
+        "fps": {
+          "mean": 59.956,
+          "min": 59.952,
+          "max": 59.962
+        },
+        "mbps": {
+          "mean": 4.0,
+          "min": 3.986,
+          "max": 4.01
+        },
+        "decodeMs": {
+          "mean": 1.3,
+          "min": 1.281,
+          "max": 1.313
+        },
+        "bufferMs": {
+          "mean": 9.016,
+          "min": 8.71,
+          "max": 9.363
+        },
+        "limitations": []
+      },
+      "presentedFps": {
+        "mean": 59.29,
+        "min": 58.291,
+        "max": 59.966
+      },
+      "renderDrops": 6
+    },
+    {
+      "label": "1080p/15",
+      "target": {
+        "width": 1920,
+        "height": 1080,
+        "fps": 15,
+        "bitrate": 8000000,
+        "priority": "maintain-resolution"
+      },
+      "nearTarget": true,
+      "connected": true,
+      "sent": {
+        "sizes": [
+          "1920x1080"
+        ],
+        "fps": {
+          "mean": 14.978,
+          "min": 14.97,
+          "max": 14.985
+        },
+        "mbps": {
+          "mean": 7.733,
+          "min": 7.527,
+          "max": 7.885
+        },
+        "encodeMs": {
+          "mean": 8.378,
+          "min": 8.2,
+          "max": 8.667
+        },
+        "queueMs": {
+          "mean": 8.751,
+          "min": 4.205,
+          "max": 14.007
+        },
+        "limitations": [
+          "none"
+        ]
+      },
+      "received": {
+        "sizes": [
+          "1920x1080"
+        ],
+        "fps": {
+          "mean": 14.978,
+          "min": 14.969,
+          "max": 14.986
+        },
+        "mbps": {
+          "mean": 7.733,
+          "min": 7.527,
+          "max": 7.885
+        },
+        "decodeMs": {
+          "mean": 2.519,
+          "min": 2.374,
+          "max": 2.791
+        },
+        "bufferMs": {
+          "mean": 106.963,
+          "min": 90.739,
+          "max": 122.507
+        },
+        "limitations": []
+      },
+      "presentedFps": {
+        "mean": 15.089,
+        "min": 14.97,
+        "max": 15.31
+      },
+      "renderDrops": 0
+    },
+    {
+      "label": "1080p/30",
+      "target": {
+        "width": 1920,
+        "height": 1080,
+        "fps": 30,
+        "bitrate": 8000000,
+        "priority": "maintain-resolution"
+      },
+      "nearTarget": true,
+      "connected": true,
+      "sent": {
+        "sizes": [
+          "1920x1080"
+        ],
+        "fps": {
+          "mean": 30.078,
+          "min": 29.964,
+          "max": 30.298
+        },
+        "mbps": {
+          "mean": 7.875,
+          "min": 7.775,
+          "max": 7.928
+        },
+        "encodeMs": {
+          "mean": 7.192,
+          "min": 7.178,
+          "max": 7.2
+        },
+        "queueMs": {
+          "mean": 0.255,
+          "min": 0.002,
+          "max": 0.759
+        },
+        "limitations": [
+          "none"
+        ]
+      },
+      "received": {
+        "sizes": [
+          "1920x1080"
+        ],
+        "fps": {
+          "mean": 30.079,
+          "min": 29.968,
+          "max": 30.301
+        },
+        "mbps": {
+          "mean": 7.875,
+          "min": 7.774,
+          "max": 7.929
+        },
+        "decodeMs": {
+          "mean": 1.696,
+          "min": 1.589,
+          "max": 1.789
+        },
+        "bufferMs": {
+          "mean": 80.288,
+          "min": 63.179,
+          "max": 92.704
+        },
+        "limitations": []
+      },
+      "presentedFps": {
+        "mean": 29.968,
+        "min": 29.639,
+        "max": 30.296
+      },
+      "renderDrops": 1
+    },
+    {
+      "label": "1080p/60",
+      "target": {
+        "width": 1920,
+        "height": 1080,
+        "fps": 60,
+        "bitrate": 8000000,
+        "priority": "maintain-resolution"
+      },
+      "nearTarget": true,
+      "connected": true,
+      "sent": {
+        "sizes": [
+          "1920x1080"
+        ],
+        "fps": {
+          "mean": 59.967,
+          "min": 59.959,
+          "max": 59.974
+        },
+        "mbps": {
+          "mean": 7.865,
+          "min": 7.799,
+          "max": 7.902
+        },
+        "encodeMs": {
+          "mean": 6.954,
+          "min": 6.883,
+          "max": 7.072
+        },
+        "queueMs": {
+          "mean": 0.002,
+          "min": 0.002,
+          "max": 0.002
+        },
+        "limitations": [
+          "none"
+        ]
+      },
+      "received": {
+        "sizes": [
+          "1920x1080"
+        ],
+        "fps": {
+          "mean": 60.077,
+          "min": 59.955,
+          "max": 60.301
+        },
+        "mbps": {
+          "mean": 7.865,
+          "min": 7.799,
+          "max": 7.902
+        },
+        "decodeMs": {
+          "mean": 1.469,
+          "min": 1.447,
+          "max": 1.5
+        },
+        "bufferMs": {
+          "mean": 10.312,
+          "min": 9.49,
+          "max": 10.959
+        },
+        "limitations": []
+      },
+      "presentedFps": {
+        "mean": 58.968,
+        "min": 57.628,
+        "max": 59.974
+      },
+      "renderDrops": 9
+    },
+    {
+      "label": "1440p/15",
+      "target": {
+        "width": 2560,
+        "height": 1440,
+        "fps": 15,
+        "bitrate": 16000000,
+        "priority": "maintain-resolution"
+      },
+      "nearTarget": true,
+      "connected": true,
+      "sent": {
+        "sizes": [
+          "2560x1440"
+        ],
+        "fps": {
+          "mean": 14.976,
+          "min": 14.647,
+          "max": 15.298
+        },
+        "mbps": {
+          "mean": 6.459,
+          "min": 5.011,
+          "max": 8.122
+        },
+        "encodeMs": {
+          "mean": 12.527,
+          "min": 12.356,
+          "max": 12.705
+        },
+        "queueMs": {
+          "mean": 30.014,
+          "min": 27.588,
+          "max": 33.278
+        },
+        "limitations": [
+          "none"
+        ]
+      },
+      "received": {
+        "sizes": [
+          "2560x1440"
+        ],
+        "fps": {
+          "mean": 14.865,
+          "min": 14.646,
+          "max": 14.985
+        },
+        "mbps": {
+          "mean": 6.459,
+          "min": 5.011,
+          "max": 8.123
+        },
+        "decodeMs": {
+          "mean": 2.604,
+          "min": 2.488,
+          "max": 2.672
+        },
+        "bufferMs": {
+          "mean": 193.564,
+          "min": 171.196,
+          "max": 209.335
+        },
+        "limitations": []
+      },
+      "presentedFps": {
+        "mean": 14.865,
+        "min": 14.647,
+        "max": 14.987
+      },
+      "renderDrops": 0
+    },
+    {
+      "label": "1440p/30",
+      "target": {
+        "width": 2560,
+        "height": 1440,
+        "fps": 30,
+        "bitrate": 16000000,
+        "priority": "maintain-resolution"
+      },
+      "nearTarget": false,
+      "connected": true,
+      "sent": {
+        "sizes": [
+          "2560x1440"
+        ],
+        "fps": {
+          "mean": 30.077,
+          "min": 29.96,
+          "max": 30.289
+        },
+        "mbps": {
+          "mean": 6.738,
+          "min": 5.28,
+          "max": 8.098
+        },
+        "encodeMs": {
+          "mean": 11.679,
+          "min": 11.478,
+          "max": 11.8
+        },
+        "queueMs": {
+          "mean": 7.011,
+          "min": 6.076,
+          "max": 8.606
+        },
+        "limitations": [
+          "none"
+        ]
+      },
+      "received": {
+        "sizes": [
+          "2560x1440"
+        ],
+        "fps": {
+          "mean": 29.856,
+          "min": 29.65,
+          "max": 29.96
+        },
+        "mbps": {
+          "mean": 6.739,
+          "min": 5.28,
+          "max": 8.098
+        },
+        "decodeMs": {
+          "mean": 2.069,
+          "min": 1.91,
+          "max": 2.274
+        },
+        "bufferMs": {
+          "mean": 102.59,
+          "min": 88.284,
+          "max": 114.502
+        },
+        "limitations": []
+      },
+      "presentedFps": {
+        "mean": 27.192,
+        "min": 24.967,
+        "max": 29.292
+      },
+      "renderDrops": 23
+    },
+    {
+      "label": "1440p/60",
+      "target": {
+        "width": 2560,
+        "height": 1440,
+        "fps": 60,
+        "bitrate": 16000000,
+        "priority": "maintain-resolution"
+      },
+      "nearTarget": false,
+      "connected": true,
+      "sent": {
+        "sizes": [
+          "2560x1440"
+        ],
+        "fps": {
+          "mean": 59.837,
+          "min": 59.616,
+          "max": 59.949
+        },
+        "mbps": {
+          "mean": 7.981,
+          "min": 6.294,
+          "max": 9.853
+        },
+        "encodeMs": {
+          "mean": 10.744,
+          "min": 10.672,
+          "max": 10.888
+        },
+        "queueMs": {
+          "mean": 0.002,
+          "min": 0.002,
+          "max": 0.003
+        },
+        "limitations": [
+          "none"
+        ]
+      },
+      "received": {
+        "sizes": [
+          "2560x1440"
+        ],
+        "fps": {
+          "mean": 59.728,
+          "min": 59.283,
+          "max": 59.95
+        },
+        "mbps": {
+          "mean": 7.981,
+          "min": 6.294,
+          "max": 9.853
+        },
+        "decodeMs": {
+          "mean": 1.828,
+          "min": 1.81,
+          "max": 1.844
+        },
+        "bufferMs": {
+          "mean": 7.576,
+          "min": 3.71,
+          "max": 9.54
+        },
+        "limitations": []
+      },
+      "presentedFps": {
+        "mean": 57.174,
+        "min": 56.951,
+        "max": 57.286
+      },
+      "renderDrops": 23
+    },
+    {
+      "label": "2160p/15",
+      "target": {
+        "width": 3840,
+        "height": 2160,
+        "fps": 15,
+        "bitrate": 40000000,
+        "priority": "maintain-resolution"
+      },
+      "nearTarget": true,
+      "connected": true,
+      "sent": {
+        "sizes": [
+          "3840x2160"
+        ],
+        "fps": {
+          "mean": 14.979,
+          "min": 14.969,
+          "max": 14.99
+        },
+        "mbps": {
+          "mean": 5.915,
+          "min": 5.281,
+          "max": 6.948
+        },
+        "encodeMs": {
+          "mean": 24.43,
+          "min": 24.267,
+          "max": 24.556
+        },
+        "queueMs": {
+          "mean": 16.192,
+          "min": 14.963,
+          "max": 17.142
+        },
+        "limitations": [
+          "none"
+        ]
+      },
+      "received": {
+        "sizes": [
+          "3840x2160"
+        ],
+        "fps": {
+          "mean": 14.869,
+          "min": 14.648,
+          "max": 14.989
+        },
+        "mbps": {
+          "mean": 5.915,
+          "min": 5.282,
+          "max": 6.947
+        },
+        "decodeMs": {
+          "mean": 4.065,
+          "min": 3.467,
+          "max": 4.754
+        },
+        "bufferMs": {
+          "mean": 145.706,
+          "min": 111.996,
+          "max": 171.41
+        },
+        "limitations": []
+      },
+      "presentedFps": {
+        "mean": 14.758,
+        "min": 14.637,
+        "max": 14.989
+      },
+      "renderDrops": 0
+    },
+    {
+      "label": "2160p/30",
+      "target": {
+        "width": 3840,
+        "height": 2160,
+        "fps": 30,
+        "bitrate": 40000000,
+        "priority": "maintain-resolution"
+      },
+      "nearTarget": true,
+      "connected": true,
+      "sent": {
+        "sizes": [
+          "3840x2160"
+        ],
+        "fps": {
+          "mean": 29.969,
+          "min": 29.953,
+          "max": 29.985
+        },
+        "mbps": {
+          "mean": 5.643,
+          "min": 4.682,
+          "max": 6.388
+        },
+        "encodeMs": {
+          "mean": 23.17,
+          "min": 22.956,
+          "max": 23.533
+        },
+        "queueMs": {
+          "mean": 2.01,
+          "min": 0.936,
+          "max": 2.802
+        },
+        "limitations": [
+          "none"
+        ]
+      },
+      "received": {
+        "sizes": [
+          "3840x2160"
+        ],
+        "fps": {
+          "mean": 29.526,
+          "min": 28.963,
+          "max": 29.986
+        },
+        "mbps": {
+          "mean": 5.643,
+          "min": 4.681,
+          "max": 6.388
+        },
+        "decodeMs": {
+          "mean": 2.845,
+          "min": 2.572,
+          "max": 3.158
+        },
+        "bufferMs": {
+          "mean": 109.284,
+          "min": 64.054,
+          "max": 148.356
+        },
+        "limitations": []
+      },
+      "presentedFps": {
+        "mean": 29.526,
+        "min": 29.295,
+        "max": 29.654
+      },
+      "renderDrops": 0
+    },
+    {
+      "label": "2160p/60",
+      "target": {
+        "width": 3840,
+        "height": 2160,
+        "fps": 60,
+        "bitrate": 40000000,
+        "priority": "maintain-resolution"
+      },
+      "nearTarget": false,
+      "connected": true,
+      "sent": {
+        "sizes": [
+          "3840x2160"
+        ],
+        "fps": {
+          "mean": 39.598,
+          "min": 32.635,
+          "max": 46.201
+        },
+        "mbps": {
+          "mean": 4.577,
+          "min": 3.449,
+          "max": 5.896
+        },
+        "encodeMs": {
+          "mean": 25.344,
+          "min": 23.01,
+          "max": 28.712
+        },
+        "queueMs": {
+          "mean": 1.928,
+          "min": 0.318,
+          "max": 5.106
+        },
+        "limitations": [
+          "none"
+        ]
+      },
+      "received": {
+        "sizes": [
+          "3840x2160"
+        ],
+        "fps": {
+          "mean": 38.71,
+          "min": 31.635,
+          "max": 46.213
+        },
+        "mbps": {
+          "mean": 4.578,
+          "min": 3.449,
+          "max": 5.897
+        },
+        "decodeMs": {
+          "mean": 3.181,
+          "min": 3.15,
+          "max": 3.224
+        },
+        "bufferMs": {
+          "mean": 124.233,
+          "min": 92.581,
+          "max": 146.327
+        },
+        "limitations": []
+      },
+      "presentedFps": {
+        "mean": 36.492,
+        "min": 29.975,
+        "max": 43.548
+      },
+      "renderDrops": 20
+    },
+    {
+      "label": "1080p/1",
+      "target": {
+        "width": 1920,
+        "height": 1080,
+        "fps": 1,
+        "bitrate": 8000000,
+        "priority": "balanced"
+      },
+      "nearTarget": false,
+      "connected": true,
+      "sent": {
+        "sizes": [
+          "1920x1080"
+        ],
+        "fps": {
+          "mean": 1.109,
+          "min": 0.998,
+          "max": 1.33
+        },
+        "mbps": {
+          "mean": 2.551,
+          "min": 2.532,
+          "max": 2.574
+        },
+        "encodeMs": {
+          "mean": 10.167,
+          "min": 9.667,
+          "max": 10.5
+        },
+        "queueMs": {
+          "mean": 236.651,
+          "min": 209.425,
+          "max": 253.459
+        },
+        "limitations": [
+          "none"
+        ]
+      },
+      "received": {
+        "sizes": [
+          "1920x1080"
+        ],
+        "fps": {
+          "mean": 0.998,
+          "min": 0.998,
+          "max": 0.999
+        },
+        "mbps": {
+          "mean": 2.55,
+          "min": 2.522,
+          "max": 2.583
+        },
+        "decodeMs": {
+          "mean": 4.227,
+          "min": 3.79,
+          "max": 4.889
+        },
+        "bufferMs": {
+          "mean": 508.976,
+          "min": 467.696,
+          "max": 538.846
+        },
+        "limitations": []
+      },
+      "presentedFps": {
+        "mean": 0.887,
+        "min": 0.666,
+        "max": 0.998
+      },
+      "renderDrops": 0
+    },
+    {
+      "label": "1080p/5",
+      "target": {
+        "width": 1920,
+        "height": 1080,
+        "fps": 5,
+        "bitrate": 8000000,
+        "priority": "balanced"
+      },
+      "nearTarget": true,
+      "connected": true,
+      "sent": {
+        "sizes": [
+          "1920x1080"
+        ],
+        "fps": {
+          "mean": 5.099,
+          "min": 4.993,
+          "max": 5.311
+        },
+        "mbps": {
+          "mean": 7.435,
+          "min": 6.728,
+          "max": 7.946
+        },
+        "encodeMs": {
+          "mean": 8.939,
+          "min": 8.733,
+          "max": 9.333
+        },
+        "queueMs": {
+          "mean": 54.228,
+          "min": 40.214,
+          "max": 67.801
+        },
+        "limitations": [
+          "none"
+        ]
+      },
+      "received": {
+        "sizes": [
+          "1920x1080"
+        ],
+        "fps": {
+          "mean": 5.1,
+          "min": 4.983,
+          "max": 5.327
+        },
+        "mbps": {
+          "mean": 7.435,
+          "min": 6.728,
+          "max": 7.952
+        },
+        "decodeMs": {
+          "mean": 3.276,
+          "min": 3.199,
+          "max": 3.427
+        },
+        "bufferMs": {
+          "mean": 143.542,
+          "min": 122.367,
+          "max": 164.148
+        },
+        "limitations": []
+      },
+      "presentedFps": {
+        "mean": 5.1,
+        "min": 4.984,
+        "max": 5.327
+      },
+      "renderDrops": 0
+    },
+    {
+      "label": "1080p/10",
+      "target": {
+        "width": 1920,
+        "height": 1080,
+        "fps": 10,
+        "bitrate": 8000000,
+        "priority": "balanced"
+      },
+      "nearTarget": false,
+      "connected": true,
+      "sent": {
+        "sizes": [
+          "1920x1080"
+        ],
+        "fps": {
+          "mean": 9.875,
+          "min": 9.653,
+          "max": 9.987
+        },
+        "mbps": {
+          "mean": 7.11,
+          "min": 5.939,
+          "max": 8.026
+        },
+        "encodeMs": {
+          "mean": 8.526,
+          "min": 8,
+          "max": 9.345
+        },
+        "queueMs": {
+          "mean": 64.912,
+          "min": 15.684,
+          "max": 122.157
+        },
+        "limitations": [
+          "none"
+        ]
+      },
+      "received": {
+        "sizes": [
+          "1920x1080"
+        ],
+        "fps": {
+          "mean": 9.654,
+          "min": 8.323,
+          "max": 10.653
+        },
+        "mbps": {
+          "mean": 7.11,
+          "min": 5.939,
+          "max": 8.027
+        },
+        "decodeMs": {
+          "mean": 2.953,
+          "min": 2.635,
+          "max": 3.439
+        },
+        "bufferMs": {
+          "mean": 249.979,
+          "min": 134.28,
+          "max": 308.277
+        },
+        "limitations": []
+      },
+      "presentedFps": {
+        "mean": 9.654,
+        "min": 8.323,
+        "max": 10.65
+      },
+      "renderDrops": 0
+    },
+    {
+      "label": "1080p/20",
+      "target": {
+        "width": 1920,
+        "height": 1080,
+        "fps": 20,
+        "bitrate": 8000000,
+        "priority": "balanced"
+      },
+      "nearTarget": true,
+      "connected": true,
+      "sent": {
+        "sizes": [
+          "1920x1080"
+        ],
+        "fps": {
+          "mean": 19.964,
+          "min": 19.64,
+          "max": 20.277
+        },
+        "mbps": {
+          "mean": 7.017,
+          "min": 5.33,
+          "max": 7.88
+        },
+        "encodeMs": {
+          "mean": 7.891,
+          "min": 7.7,
+          "max": 8.136
+        },
+        "queueMs": {
+          "mean": 2.692,
+          "min": 0.563,
+          "max": 4.504
+        },
+        "limitations": [
+          "none"
+        ]
+      },
+      "received": {
+        "sizes": [
+          "1920x1080"
+        ],
+        "fps": {
+          "mean": 20.186,
+          "min": 19.944,
+          "max": 20.639
+        },
+        "mbps": {
+          "mean": 7.017,
+          "min": 5.33,
+          "max": 7.88
+        },
+        "decodeMs": {
+          "mean": 1.94,
+          "min": 1.871,
+          "max": 1.987
+        },
+        "bufferMs": {
+          "mean": 193.9,
+          "min": 177.789,
+          "max": 215.049
+        },
+        "limitations": []
+      },
+      "presentedFps": {
+        "mean": 20.187,
+        "min": 19.977,
+        "max": 20.306
+      },
+      "renderDrops": 0
+    },
+    {
+      "label": "1080p/24",
+      "target": {
+        "width": 1920,
+        "height": 1080,
+        "fps": 24,
+        "bitrate": 8000000,
+        "priority": "balanced"
+      },
+      "nearTarget": false,
+      "connected": true,
+      "sent": {
+        "sizes": [
+          "1280x720"
+        ],
+        "fps": {
+          "mean": 23.971,
+          "min": 23.956,
+          "max": 23.981
+        },
+        "mbps": {
+          "mean": 7.683,
+          "min": 7.198,
+          "max": 8.006
+        },
+        "encodeMs": {
+          "mean": 6.935,
+          "min": 6.667,
+          "max": 7.139
+        },
+        "queueMs": {
+          "mean": 1.509,
+          "min": 0.085,
+          "max": 3.053
+        },
+        "limitations": [
+          "bandwidth"
+        ]
+      },
+      "received": {
+        "sizes": [
+          "1280x720"
+        ],
+        "fps": {
+          "mean": 23.971,
+          "min": 23.632,
+          "max": 24.308
+        },
+        "mbps": {
+          "mean": 7.683,
+          "min": 7.135,
+          "max": 8.069
+        },
+        "decodeMs": {
+          "mean": 1.613,
+          "min": 1.523,
+          "max": 1.736
+        },
+        "bufferMs": {
+          "mean": 78.993,
+          "min": 68.661,
+          "max": 85.262
+        },
+        "limitations": []
+      },
+      "presentedFps": {
+        "mean": 23.86,
+        "min": 23.634,
+        "max": 23.974
+      },
+      "renderDrops": 0
+    },
+    {
+      "label": "1080p/25",
+      "target": {
+        "width": 1920,
+        "height": 1080,
+        "fps": 25,
+        "bitrate": 8000000,
+        "priority": "balanced"
+      },
+      "nearTarget": true,
+      "connected": true,
+      "sent": {
+        "sizes": [
+          "1920x1080"
+        ],
+        "fps": {
+          "mean": 25.086,
+          "min": 24.956,
+          "max": 25.311
+        },
+        "mbps": {
+          "mean": 6.772,
+          "min": 4.762,
+          "max": 7.947
+        },
+        "encodeMs": {
+          "mean": 7.469,
+          "min": 7.387,
+          "max": 7.526
+        },
+        "queueMs": {
+          "mean": 0.755,
+          "min": 0.279,
+          "max": 1.402
+        },
+        "limitations": [
+          "none"
+        ]
+      },
+      "received": {
+        "sizes": [
+          "1920x1080"
+        ],
+        "fps": {
+          "mean": 25.195,
+          "min": 24.986,
+          "max": 25.307
+        },
+        "mbps": {
+          "mean": 6.772,
+          "min": 4.77,
+          "max": 7.945
+        },
+        "decodeMs": {
+          "mean": 1.756,
+          "min": 1.572,
+          "max": 1.952
+        },
+        "bufferMs": {
+          "mean": 127.41,
+          "min": 112.063,
+          "max": 150.456
+        },
+        "limitations": []
+      },
+      "presentedFps": {
+        "mean": 25.194,
+        "min": 24.963,
+        "max": 25.316
+      },
+      "renderDrops": 0
+    },
+    {
+      "label": "1080p/45",
+      "target": {
+        "width": 1920,
+        "height": 1080,
+        "fps": 45,
+        "bitrate": 8000000,
+        "priority": "balanced"
+      },
+      "nearTarget": false,
+      "connected": true,
+      "sent": {
+        "sizes": [
+          "1280x720"
+        ],
+        "fps": {
+          "mean": 44.913,
+          "min": 44.797,
+          "max": 44.978
+        },
+        "mbps": {
+          "mean": 7.692,
+          "min": 7.197,
+          "max": 7.947
+        },
+        "encodeMs": {
+          "mean": 5.469,
+          "min": 5.37,
+          "max": 5.556
+        },
+        "queueMs": {
+          "mean": 0.043,
+          "min": 0.001,
+          "max": 0.126
+        },
+        "limitations": [
+          "bandwidth"
+        ]
+      },
+      "received": {
+        "sizes": [
+          "1280x720"
+        ],
+        "fps": {
+          "mean": 44.912,
+          "min": 44.796,
+          "max": 44.979
+        },
+        "mbps": {
+          "mean": 7.692,
+          "min": 7.197,
+          "max": 7.948
+        },
+        "decodeMs": {
+          "mean": 1.146,
+          "min": 1.002,
+          "max": 1.247
+        },
+        "bufferMs": {
+          "mean": 3.344,
+          "min": 0.855,
+          "max": 4.653
+        },
+        "limitations": []
+      },
+      "presentedFps": {
+        "mean": 42.913,
+        "min": 41.965,
+        "max": 44.794
+      },
+      "renderDrops": 19
+    },
+    {
+      "label": "preset/auto",
+      "target": {
+        "width": 1920,
+        "height": 1080,
+        "fps": 30,
+        "bitrate": 8000000,
+        "priority": "balanced"
+      },
+      "nearTarget": false,
+      "connected": true,
+      "sent": {
+        "sizes": [
+          "1280x720"
+        ],
+        "fps": {
+          "mean": 29.974,
+          "min": 29.65,
+          "max": 30.306
+        },
+        "mbps": {
+          "mean": 7.908,
+          "min": 7.726,
+          "max": 8.046
+        },
+        "encodeMs": {
+          "mean": 6.663,
+          "min": 6.596,
+          "max": 6.767
+        },
+        "queueMs": {
+          "mean": 0.176,
+          "min": 0.003,
+          "max": 0.488
+        },
+        "limitations": [
+          "bandwidth"
+        ]
+      },
+      "received": {
+        "sizes": [
+          "1280x720"
+        ],
+        "fps": {
+          "mean": 29.974,
+          "min": 29.653,
+          "max": 30.296
+        },
+        "mbps": {
+          "mean": 7.914,
+          "min": 7.745,
+          "max": 8.046
+        },
+        "decodeMs": {
+          "mean": 1.692,
+          "min": 1.634,
+          "max": 1.8
+        },
+        "bufferMs": {
+          "mean": 69.637,
+          "min": 62.437,
+          "max": 80.061
+        },
+        "limitations": []
+      },
+      "presentedFps": {
+        "mean": 28.198,
+        "min": 26.988,
+        "max": 29.974
+      },
+      "renderDrops": 16
+    },
+    {
+      "label": "preset/clear",
+      "target": {
+        "width": 2560,
+        "height": 1440,
+        "fps": 24,
+        "bitrate": 12000000,
+        "priority": "maintain-resolution"
+      },
+      "nearTarget": true,
+      "connected": true,
+      "sent": {
+        "sizes": [
+          "2560x1440"
+        ],
+        "fps": {
+          "mean": 24.086,
+          "min": 23.978,
+          "max": 24.294
+        },
+        "mbps": {
+          "mean": 6.417,
+          "min": 5.736,
+          "max": 7.151
+        },
+        "encodeMs": {
+          "mean": 11.696,
+          "min": 11.583,
+          "max": 11.767
+        },
+        "queueMs": {
+          "mean": 12.226,
+          "min": 11.107,
+          "max": 13.665
+        },
+        "limitations": [
+          "none"
+        ]
+      },
+      "received": {
+        "sizes": [
+          "2560x1440"
+        ],
+        "fps": {
+          "mean": 23.975,
+          "min": 23.962,
+          "max": 23.987
+        },
+        "mbps": {
+          "mean": 6.417,
+          "min": 5.767,
+          "max": 7.151
+        },
+        "decodeMs": {
+          "mean": 2.066,
+          "min": 1.879,
+          "max": 2.31
+        },
+        "bufferMs": {
+          "mean": 104.135,
+          "min": 91.555,
+          "max": 116.406
+        },
+        "limitations": []
+      },
+      "presentedFps": {
+        "mean": 23.975,
+        "min": 23.966,
+        "max": 23.984
+      },
+      "renderDrops": 0
+    },
+    {
+      "label": "preset/smooth",
+      "target": {
+        "width": 1920,
+        "height": 1080,
+        "fps": 60,
+        "bitrate": 10000000,
+        "priority": "maintain-framerate"
+      },
+      "nearTarget": false,
+      "connected": true,
+      "sent": {
+        "sizes": [
+          "1280x720"
+        ],
+        "fps": {
+          "mean": 59.957,
+          "min": 59.949,
+          "max": 59.963
+        },
+        "mbps": {
+          "mean": 9.469,
+          "min": 8.546,
+          "max": 9.963
+        },
+        "encodeMs": {
+          "mean": 6.019,
+          "min": 5.878,
+          "max": 6.094
+        },
+        "queueMs": {
+          "mean": 0.001,
+          "min": 0.001,
+          "max": 0.002
+        },
+        "limitations": [
+          "bandwidth"
+        ]
+      },
+      "received": {
+        "sizes": [
+          "1280x720"
+        ],
+        "fps": {
+          "mean": 60.179,
+          "min": 59.948,
+          "max": 60.625
+        },
+        "mbps": {
+          "mean": 9.469,
+          "min": 8.546,
+          "max": 9.962
+        },
+        "decodeMs": {
+          "mean": 1.415,
+          "min": 1.395,
+          "max": 1.435
+        },
+        "bufferMs": {
+          "mean": 15.937,
+          "min": 8.627,
+          "max": 29.352
+        },
+        "limitations": []
+      },
+      "presentedFps": {
+        "mean": 57.074,
+        "min": 56.283,
+        "max": 57.63
+      },
+      "renderDrops": 29
+    },
+    {
+      "label": "bitrate-cap/balanced",
+      "target": {
+        "width": 1280,
+        "height": 720,
+        "fps": 60,
+        "bitrate": 500000,
+        "priority": "balanced"
+      },
+      "nearTarget": false,
+      "connected": true,
+      "sent": {
+        "sizes": [
+          "640x360"
+        ],
+        "fps": {
+          "mean": 35.255,
+          "min": 14.986,
+          "max": 59.803
+        },
+        "mbps": {
+          "mean": 0.388,
+          "min": 0.275,
+          "max": 0.486
+        },
+        "encodeMs": {
+          "mean": 3.545,
+          "min": 3.317,
+          "max": 3.844
+        },
+        "queueMs": {
+          "mean": 0.106,
+          "min": 0.001,
+          "max": 0.314
+        },
+        "limitations": [
+          "bandwidth"
+        ]
+      },
+      "received": {
+        "sizes": [
+          "640x360"
+        ],
+        "fps": {
+          "mean": 35.696,
+          "min": 14.977,
+          "max": 60.138
+        },
+        "mbps": {
+          "mean": 0.387,
+          "min": 0.275,
+          "max": 0.486
+        },
+        "decodeMs": {
+          "mean": 1.671,
+          "min": 1.276,
+          "max": 2.189
+        },
+        "bufferMs": {
+          "mean": 71.724,
+          "min": 66.086,
+          "max": 76.293
+        },
+        "limitations": []
+      },
+      "presentedFps": {
+        "mean": 34.366,
+        "min": 15.311,
+        "max": 56.15
+      },
+      "renderDrops": 12
+    },
+    {
+      "label": "bitrate-cap/maintain-resolution",
+      "target": {
+        "width": 1280,
+        "height": 720,
+        "fps": 60,
+        "bitrate": 500000,
+        "priority": "maintain-resolution"
+      },
+      "nearTarget": false,
+      "connected": true,
+      "sent": {
+        "sizes": [
+          "1280x720"
+        ],
+        "fps": {
+          "mean": 23.178,
+          "min": 19.976,
+          "max": 25.647
+        },
+        "mbps": {
+          "mean": 0.499,
+          "min": 0.489,
+          "max": 0.511
+        },
+        "encodeMs": {
+          "mean": 6.325,
+          "min": 5.779,
+          "max": 6.6
+        },
+        "queueMs": {
+          "mean": 1.734,
+          "min": 0.565,
+          "max": 3.139
+        },
+        "limitations": [
+          "none"
+        ]
+      },
+      "received": {
+        "sizes": [
+          "1280x720"
+        ],
+        "fps": {
+          "mean": 22.956,
+          "min": 19.972,
+          "max": 25.647
+        },
+        "mbps": {
+          "mean": 0.499,
+          "min": 0.489,
+          "max": 0.511
+        },
+        "decodeMs": {
+          "mean": 1.853,
+          "min": 1.55,
+          "max": 2.082
+        },
+        "bufferMs": {
+          "mean": 87.15,
+          "min": 82.638,
+          "max": 91.053
+        },
+        "limitations": []
+      },
+      "presentedFps": {
+        "mean": 22.624,
+        "min": 20.302,
+        "max": 25.316
+      },
+      "renderDrops": 2
+    },
+    {
+      "label": "bitrate-cap/maintain-framerate",
+      "target": {
+        "width": 1280,
+        "height": 720,
+        "fps": 60,
+        "bitrate": 500000,
+        "priority": "maintain-framerate"
+      },
+      "nearTarget": false,
+      "connected": true,
+      "sent": {
+        "sizes": [
+          "480x270",
+          "640x360"
+        ],
+        "fps": {
+          "mean": 46.141,
+          "min": 36.491,
+          "max": 59.966
+        },
+        "mbps": {
+          "mean": 0.499,
+          "min": 0.488,
+          "max": 0.507
+        },
+        "encodeMs": {
+          "mean": 2.978,
+          "min": 2.455,
+          "max": 3.456
+        },
+        "queueMs": {
+          "mean": 8.324,
+          "min": 0.001,
+          "max": 16.364
+        },
+        "limitations": [
+          "bandwidth"
+        ]
+      },
+      "received": {
+        "sizes": [
+          "480x270",
+          "640x360"
+        ],
+        "fps": {
+          "mean": 46.141,
+          "min": 35.827,
+          "max": 59.971
+        },
+        "mbps": {
+          "mean": 0.499,
+          "min": 0.488,
+          "max": 0.507
+        },
+        "decodeMs": {
+          "mean": 1.311,
+          "min": 1.243,
+          "max": 1.362
+        },
+        "bufferMs": {
+          "mean": 77.587,
+          "min": 73.737,
+          "max": 80.744
+        },
+        "limitations": []
+      },
+      "presentedFps": {
+        "mean": 43.919,
+        "min": 35.827,
+        "max": 55.974
+      },
+      "renderDrops": 20
+    }
+  ],
+  "static": [
+    {
+      "label": "static/1080p30",
+      "target": {
+        "width": 1920,
+        "height": 1080,
+        "fps": 30,
+        "bitrate": 8000000,
+        "priority": "balanced"
+      },
+      "nearTarget": false,
+      "connected": true,
+      "sent": {
+        "sizes": [],
+        "fps": {
+          "mean": 0,
+          "min": 0,
+          "max": 0
+        },
+        "mbps": {
+          "mean": 0,
+          "min": 0,
+          "max": 0
+        },
+        "limitations": [
+          "bandwidth"
+        ]
+      },
+      "received": {
+        "sizes": [
+          "1920x1080"
+        ],
+        "fps": {
+          "mean": 0,
+          "min": 0,
+          "max": 0
+        },
+        "mbps": {
+          "mean": 0,
+          "min": 0,
+          "max": 0
+        },
+        "limitations": []
+      },
+      "presentedFps": {
+        "mean": 0,
+        "min": 0,
+        "max": 0
+      },
+      "renderDrops": 0,
+      "initialFrameDecoded": true
+    }
+  ],
+  "switch": [
+    {
+      "label": "switch/720p/15/2000000",
+      "target": {
+        "width": 1280,
+        "height": 720,
+        "fps": 15,
+        "bitrate": 2000000,
+        "priority": "balanced"
+      },
+      "nearTarget": false,
+      "connected": true,
+      "sent": {
+        "sizes": [
+          "1280x720"
+        ],
+        "fps": {
+          "mean": 14.991,
+          "min": 14.989,
+          "max": 14.992
+        },
+        "mbps": {
+          "mean": 1.953,
+          "min": 1.946,
+          "max": 1.96
+        },
+        "encodeMs": {
+          "mean": 7.767,
+          "min": 7.333,
+          "max": 8.2
+        },
+        "queueMs": {
+          "mean": 1.041,
+          "min": 0.608,
+          "max": 1.475
+        },
+        "limitations": [
+          "none"
+        ]
+      },
+      "received": {
+        "sizes": [
+          "1280x720"
+        ],
+        "fps": {
+          "mean": 14.991,
+          "min": 14.989,
+          "max": 14.994
+        },
+        "mbps": {
+          "mean": 1.953,
+          "min": 1.946,
+          "max": 1.96
+        },
+        "decodeMs": {
+          "mean": 2.57,
+          "min": 2.487,
+          "max": 2.653
+        },
+        "bufferMs": {
+          "mean": 49.033,
+          "min": 45.301,
+          "max": 52.764
+        },
+        "limitations": []
+      },
+      "presentedFps": {
+        "mean": 13.493,
+        "min": 12.324,
+        "max": 14.661
+      },
+      "renderDrops": 8,
+      "applyMs": 4.400000095367432,
+      "sameTrack": true
+    },
+    {
+      "label": "switch/1080p/30/8000000",
+      "target": {
+        "width": 1920,
+        "height": 1080,
+        "fps": 30,
+        "bitrate": 8000000,
+        "priority": "balanced"
+      },
+      "nearTarget": true,
+      "connected": true,
+      "sent": {
+        "sizes": [
+          "1920x1080"
+        ],
+        "fps": {
+          "mean": 29.983,
+          "min": 29.982,
+          "max": 29.984
+        },
+        "mbps": {
+          "mean": 7.16,
+          "min": 6.502,
+          "max": 7.818
+        },
+        "encodeMs": {
+          "mean": 8.0,
+          "min": 7.889,
+          "max": 8.111
+        },
+        "queueMs": {
+          "mean": 0.044,
+          "min": 0.032,
+          "max": 0.055
+        },
+        "limitations": [
+          "none"
+        ]
+      },
+      "received": {
+        "sizes": [
+          "1920x1080"
+        ],
+        "fps": {
+          "mean": 30.816,
+          "min": 29.984,
+          "max": 31.649
+        },
+        "mbps": {
+          "mean": 7.16,
+          "min": 6.501,
+          "max": 7.819
+        },
+        "decodeMs": {
+          "mean": 1.974,
+          "min": 1.861,
+          "max": 2.088
+        },
+        "bufferMs": {
+          "mean": 167.711,
+          "min": 119.766,
+          "max": 215.656
+        },
+        "limitations": []
+      },
+      "presentedFps": {
+        "mean": 30.317,
+        "min": 30.317,
+        "max": 30.317
+      },
+      "renderDrops": 4,
+      "applyMs": 0.7000000476837158,
+      "sameTrack": true
+    },
+    {
+      "label": "switch/1440p/60/12000000",
+      "target": {
+        "width": 2560,
+        "height": 1440,
+        "fps": 60,
+        "bitrate": 12000000,
+        "priority": "maintain-resolution"
+      },
+      "nearTarget": false,
+      "connected": true,
+      "sent": {
+        "sizes": [
+          "2560x1440"
+        ],
+        "fps": {
+          "mean": 59.967,
+          "min": 59.961,
+          "max": 59.972
+        },
+        "mbps": {
+          "mean": 11.875,
+          "min": 11.866,
+          "max": 11.885
+        },
+        "encodeMs": {
+          "mean": 12.856,
+          "min": 12.806,
+          "max": 12.906
+        },
+        "queueMs": {
+          "mean": 0.002,
+          "min": 0.002,
+          "max": 0.002
+        },
+        "limitations": [
+          "none"
+        ]
+      },
+      "received": {
+        "sizes": [
+          "2560x1440"
+        ],
+        "fps": {
+          "mean": 60.633,
+          "min": 60.628,
+          "max": 60.637
+        },
+        "mbps": {
+          "mean": 11.875,
+          "min": 11.866,
+          "max": 11.884
+        },
+        "decodeMs": {
+          "mean": 2.274,
+          "min": 2.269,
+          "max": 2.279
+        },
+        "bufferMs": {
+          "mean": 105.643,
+          "min": 90.692,
+          "max": 120.594
+        },
+        "limitations": []
+      },
+      "presentedFps": {
+        "mean": 57.634,
+        "min": 56.973,
+        "max": 58.294
+      },
+      "renderDrops": 19,
+      "applyMs": 0.7000000476837158,
+      "sameTrack": true
+    },
+    {
+      "label": "switch/2160p/30/24000000",
+      "target": {
+        "width": 3840,
+        "height": 2160,
+        "fps": 30,
+        "bitrate": 24000000,
+        "priority": "maintain-resolution"
+      },
+      "nearTarget": true,
+      "connected": true,
+      "sent": {
+        "sizes": [
+          "3840x2160"
+        ],
+        "fps": {
+          "mean": 29.976,
+          "min": 29.97,
+          "max": 29.983
+        },
+        "mbps": {
+          "mean": 20.345,
+          "min": 18.388,
+          "max": 22.302
+        },
+        "encodeMs": {
+          "mean": 22.506,
+          "min": 22.4,
+          "max": 22.611
+        },
+        "queueMs": {
+          "mean": 5.645,
+          "min": 5.64,
+          "max": 5.651
+        },
+        "limitations": [
+          "none"
+        ]
+      },
+      "received": {
+        "sizes": [
+          "3840x2160"
+        ],
+        "fps": {
+          "mean": 29.976,
+          "min": 29.971,
+          "max": 29.98
+        },
+        "mbps": {
+          "mean": 20.345,
+          "min": 18.387,
+          "max": 22.303
+        },
+        "decodeMs": {
+          "mean": 3.215,
+          "min": 3.094,
+          "max": 3.335
+        },
+        "bufferMs": {
+          "mean": 106.083,
+          "min": 102.389,
+          "max": 109.776
+        },
+        "limitations": []
+      },
+      "presentedFps": {
+        "mean": 29.643,
+        "min": 29.641,
+        "max": 29.645
+      },
+      "renderDrops": 1,
+      "applyMs": 3.799999952316284,
+      "sameTrack": true
+    },
+    {
+      "label": "switch/720p/60/10000000",
+      "target": {
+        "width": 1280,
+        "height": 720,
+        "fps": 60,
+        "bitrate": 10000000,
+        "priority": "maintain-framerate"
+      },
+      "nearTarget": false,
+      "connected": true,
+      "sent": {
+        "sizes": [
+          "1280x720"
+        ],
+        "fps": {
+          "mean": 59.944,
+          "min": 59.942,
+          "max": 59.945
+        },
+        "mbps": {
+          "mean": 9.861,
+          "min": 9.857,
+          "max": 9.865
+        },
+        "encodeMs": {
+          "mean": 6.494,
+          "min": 6.394,
+          "max": 6.594
+        },
+        "queueMs": {
+          "mean": 0.002,
+          "min": 0.002,
+          "max": 0.002
+        },
+        "limitations": [
+          "none"
+        ]
+      },
+      "received": {
+        "sizes": [
+          "1280x720"
+        ],
+        "fps": {
+          "mean": 60.278,
+          "min": 60.277,
+          "max": 60.278
+        },
+        "mbps": {
+          "mean": 9.861,
+          "min": 9.857,
+          "max": 9.866
+        },
+        "decodeMs": {
+          "mean": 1.538,
+          "min": 1.448,
+          "max": 1.628
+        },
+        "bufferMs": {
+          "mean": 118.62,
+          "min": 118.584,
+          "max": 118.656
+        },
+        "limitations": []
+      },
+      "presentedFps": {
+        "mean": 54.284,
+        "min": 53.953,
+        "max": 54.616
+      },
+      "renderDrops": 35,
+      "applyMs": 3.5,
+      "sameTrack": true
+    },
+    {
+      "label": "switch/1080p/30/8000000",
+      "target": {
+        "width": 1920,
+        "height": 1080,
+        "fps": 30,
+        "bitrate": 8000000,
+        "priority": "balanced"
+      },
+      "nearTarget": true,
+      "connected": true,
+      "sent": {
+        "sizes": [
+          "1920x1080"
+        ],
+        "fps": {
+          "mean": 29.98,
+          "min": 29.973,
+          "max": 29.987
+        },
+        "mbps": {
+          "mean": 7.937,
+          "min": 7.899,
+          "max": 7.975
+        },
+        "encodeMs": {
+          "mean": 7.594,
+          "min": 7.456,
+          "max": 7.733
+        },
+        "queueMs": {
+          "mean": 0.003,
+          "min": 0.003,
+          "max": 0.003
+        },
+        "limitations": [
+          "none"
+        ]
+      },
+      "received": {
+        "sizes": [
+          "1920x1080"
+        ],
+        "fps": {
+          "mean": 30.151,
+          "min": 29.981,
+          "max": 30.32
+        },
+        "mbps": {
+          "mean": 7.938,
+          "min": 7.899,
+          "max": 7.977
+        },
+        "decodeMs": {
+          "mean": 1.796,
+          "min": 1.724,
+          "max": 1.869
+        },
+        "bufferMs": {
+          "mean": 86.336,
+          "min": 78.814,
+          "max": 93.857
+        },
+        "limitations": []
+      },
+      "presentedFps": {
+        "mean": 30.152,
+        "min": 29.984,
+        "max": 30.32
+      },
+      "renderDrops": 0,
+      "applyMs": 0.7999999523162842,
+      "sameTrack": true
+    },
+    {
+      "label": "switch/1080p/30/2000000",
+      "target": {
+        "width": 1920,
+        "height": 1080,
+        "fps": 30,
+        "bitrate": 2000000,
+        "priority": "balanced"
+      },
+      "nearTarget": false,
+      "connected": true,
+      "sent": {
+        "sizes": [
+          "1280x720",
+          "960x540"
+        ],
+        "fps": {
+          "mean": 29.973,
+          "min": 29.971,
+          "max": 29.976
+        },
+        "mbps": {
+          "mean": 1.926,
+          "min": 1.856,
+          "max": 1.997
+        },
+        "encodeMs": {
+          "mean": 7.833,
+          "min": 7.289,
+          "max": 8.378
+        },
+        "queueMs": {
+          "mean": 2.61,
+          "min": 1.432,
+          "max": 3.788
+        },
+        "limitations": [
+          "bandwidth"
+        ]
+      },
+      "received": {
+        "sizes": [
+          "1280x720",
+          "960x540"
+        ],
+        "fps": {
+          "mean": 29.975,
+          "min": 29.974,
+          "max": 29.976
+        },
+        "mbps": {
+          "mean": 1.927,
+          "min": 1.856,
+          "max": 1.997
+        },
+        "decodeMs": {
+          "mean": 1.471,
+          "min": 1.464,
+          "max": 1.479
+        },
+        "bufferMs": {
+          "mean": 73.226,
+          "min": 69.855,
+          "max": 76.596
+        },
+        "limitations": []
+      },
+      "presentedFps": {
+        "mean": 29.976,
+        "min": 29.646,
+        "max": 30.307
+      },
+      "renderDrops": 0,
+      "applyMs": 0.5,
+      "sameTrack": true
+    }
+  ],
+  "bufferComparison": [
+    {
+      "label": "buffer/default",
+      "target": {
+        "width": 2560,
+        "height": 1440,
+        "fps": 30,
+        "bitrate": 12000000,
+        "priority": "maintain-resolution"
+      },
+      "nearTarget": true,
+      "connected": true,
+      "sent": {
+        "sizes": [
+          "2560x1440"
+        ],
+        "fps": {
+          "mean": 30.024,
+          "min": 29.869,
+          "max": 30.252
+        },
+        "mbps": {
+          "mean": 6.214,
+          "min": 5.68,
+          "max": 7.145
+        },
+        "encodeMs": {
+          "mean": 11.616,
+          "min": 11.56,
+          "max": 11.7
+        },
+        "queueMs": {
+          "mean": 7.513,
+          "min": 7.011,
+          "max": 8.215
+        },
+        "limitations": [
+          "none"
+        ]
+      },
+      "received": {
+        "sizes": [
+          "2560x1440"
+        ],
+        "fps": {
+          "mean": 29.802,
+          "min": 29.538,
+          "max": 29.952
+        },
+        "mbps": {
+          "mean": 6.214,
+          "min": 5.68,
+          "max": 7.146
+        },
+        "decodeMs": {
+          "mean": 2.179,
+          "min": 2.11,
+          "max": 2.256
+        },
+        "bufferMs": {
+          "mean": 94.496,
+          "min": 82.199,
+          "max": 108.863
+        },
+        "limitations": []
+      },
+      "presentedFps": {
+        "mean": 29.912,
+        "min": 29.871,
+        "max": 29.952
+      },
+      "renderDrops": 0
+    },
+    {
+      "label": "buffer/0",
+      "target": {
+        "width": 2560,
+        "height": 1440,
+        "fps": 30,
+        "bitrate": 12000000,
+        "priority": "maintain-resolution"
+      },
+      "nearTarget": true,
+      "connected": true,
+      "sent": {
+        "sizes": [
+          "2560x1440"
+        ],
+        "fps": {
+          "mean": 29.971,
+          "min": 29.636,
+          "max": 30.306
+        },
+        "mbps": {
+          "mean": 5.909,
+          "min": 4.613,
+          "max": 7.375
+        },
+        "encodeMs": {
+          "mean": 11.593,
+          "min": 11.418,
+          "max": 11.733
+        },
+        "queueMs": {
+          "mean": 6.671,
+          "min": 5.76,
+          "max": 7.258
+        },
+        "limitations": [
+          "none"
+        ]
+      },
+      "received": {
+        "sizes": [
+          "2560x1440"
+        ],
+        "fps": {
+          "mean": 29.749,
+          "min": 29.632,
+          "max": 29.979
+        },
+        "mbps": {
+          "mean": 5.909,
+          "min": 4.613,
+          "max": 7.375
+        },
+        "decodeMs": {
+          "mean": 2.031,
+          "min": 1.905,
+          "max": 2.149
+        },
+        "bufferMs": {
+          "mean": 126.1,
+          "min": 105.53,
+          "max": 143.557
+        },
+        "limitations": []
+      },
+      "presentedFps": {
+        "mean": 29.75,
+        "min": 29.632,
+        "max": 29.98
+      },
+      "renderDrops": 0
+    },
+    {
+      "label": "buffer/default",
+      "target": {
+        "width": 2560,
+        "height": 1440,
+        "fps": 30,
+        "bitrate": 12000000,
+        "priority": "maintain-resolution"
+      },
+      "nearTarget": true,
+      "connected": true,
+      "sent": {
+        "sizes": [
+          "2560x1440"
+        ],
+        "fps": {
+          "mean": 30.039,
+          "min": 29.867,
+          "max": 30.278
+        },
+        "mbps": {
+          "mean": 6.866,
+          "min": 5.386,
+          "max": 8.341
+        },
+        "encodeMs": {
+          "mean": 11.668,
+          "min": 11.533,
+          "max": 11.758
+        },
+        "queueMs": {
+          "mean": 6.661,
+          "min": 5.583,
+          "max": 8.04
+        },
+        "limitations": [
+          "none"
+        ]
+      },
+      "received": {
+        "sizes": [
+          "2560x1440"
+        ],
+        "fps": {
+          "mean": 29.817,
+          "min": 29.61,
+          "max": 30.204
+        },
+        "mbps": {
+          "mean": 6.866,
+          "min": 5.317,
+          "max": 8.41
+        },
+        "decodeMs": {
+          "mean": 2.052,
+          "min": 1.887,
+          "max": 2.231
+        },
+        "bufferMs": {
+          "mean": 112.191,
+          "min": 91.754,
+          "max": 129.811
+        },
+        "limitations": []
+      },
+      "presentedFps": {
+        "mean": 29.817,
+        "min": 29.61,
+        "max": 29.964
+      },
+      "renderDrops": 0
+    },
+    {
+      "label": "buffer/0",
+      "target": {
+        "width": 2560,
+        "height": 1440,
+        "fps": 30,
+        "bitrate": 12000000,
+        "priority": "maintain-resolution"
+      },
+      "nearTarget": false,
+      "connected": true,
+      "sent": {
+        "sizes": [
+          "2560x1440"
+        ],
+        "fps": {
+          "mean": 30.039,
+          "min": 29.631,
+          "max": 30.288
+        },
+        "mbps": {
+          "mean": 6.998,
+          "min": 5.513,
+          "max": 8.658
+        },
+        "encodeMs": {
+          "mean": 11.358,
+          "min": 11.33,
+          "max": 11.404
+        },
+        "queueMs": {
+          "mean": 6.698,
+          "min": 5.723,
+          "max": 7.319
+        },
+        "limitations": [
+          "none"
+        ]
+      },
+      "received": {
+        "sizes": [
+          "2560x1440"
+        ],
+        "fps": {
+          "mean": 29.817,
+          "min": 29.621,
+          "max": 29.965
+        },
+        "mbps": {
+          "mean": 6.998,
+          "min": 5.513,
+          "max": 8.658
+        },
+        "decodeMs": {
+          "mean": 2.069,
+          "min": 1.972,
+          "max": 2.261
+        },
+        "bufferMs": {
+          "mean": 114.562,
+          "min": 101.705,
+          "max": 125.538
+        },
+        "limitations": []
+      },
+      "presentedFps": {
+        "mean": 28.157,
+        "min": 25.551,
+        "max": 29.621
+      },
+      "renderDrops": 15
+    }
+  ]
+}

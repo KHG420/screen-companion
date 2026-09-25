@@ -30,4 +30,17 @@ class QualityTest {
             try { it();fail("invalid accepted") } catch(_:IllegalArgumentException) {}
         }
     }
+    @Test fun allFrameRatesPreserveIndependentSizeBitrateAndPriority() {
+        for ((width, height) in listOf(320 to 180,640 to 360,1280 to 720,1920 to 1080,2560 to 1440,3840 to 2160)) {
+            for (priority in VideoPriority.entries) for (fps in 1..60) {
+                val q=Quality(width,height,fps,500_000+fps*100_000,priority)
+                assertEquals(width to height,q.captureSize(3840,2160))
+                assertEquals(height to width,q.captureSize(2160,3840))
+                assertEquals(fps,q.fps)
+                assertEquals(500_000+fps*100_000,q.bitrate)
+                assertEquals(priority == VideoPriority.RESOLUTION && fps <= 30,q.detailContent)
+                assertEquals(q.captureSize(3840,2160),q.copy(bitrate=80_000_000).captureSize(3840,2160))
+            }
+        }
+    }
 }

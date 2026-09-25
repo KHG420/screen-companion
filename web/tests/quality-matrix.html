@@ -1,0 +1,122 @@
+<!doctype html><meta charset="utf-8"><title>同屏 · 全画质性能验证</title>
+<h1>全画质与帧率验证（开发环境）</h1>
+<p>动态素材使用目标尺寸与帧率。记录实际发送、解码、呈现和耗时，目标参数不算达标证据。此页不验证系统录屏权限，也不模拟真实弱网。</p>
+<button id="run">运行画质矩阵</button><button id="switch">运行连续切换</button>
+<button id="buffer">运行接收缓冲对照</button>
+<button id="static">运行静止画面验证</button>
+<p id="progress">等待开始</p><video id="view" autoplay muted playsinline width="640"></video><pre id="result"></pre>
+<script type="module">
+import {Call,qualities} from '../call.js';
+const view=document.querySelector('#view'),out=document.querySelector('#result'),progress=document.querySelector('#progress');
+const wait=ms=>new Promise(r=>setTimeout(r,ms));
+let audio,source,sourceQuality,timer,drawn=0,presented=0,callback,staticSource=false;
+const report={version:'0.4.4',warmupSeconds:8,windowSeconds:3,windows:3,runs:[]};
+navigator.mediaDevices.getUserMedia=async()=>audio.createMediaStreamDestination().stream;
+navigator.mediaDevices.getDisplayMedia=async()=>{
+  const {width,height,fps}=sourceQuality;
+  const canvas=document.createElement('canvas');canvas.width=width;canvas.height=height;
+  const ctx=canvas.getContext('2d',{alpha:false}),pattern=document.createElement('canvas');
+  const stripe=Math.max(8,Math.round(height/27));pattern.width=width;pattern.height=height+stripe*2;
+  const p=pattern.getContext('2d',{alpha:false});p.font=`${Math.max(10,Math.round(width/96))}px sans-serif`;
+  for(let y=0;y<pattern.height;y+=stripe){p.fillStyle=y%(stripe*2)?'#23435b':'#426879';p.fillRect(0,y,width,stripe);p.fillStyle='#f2d28d';p.fillText('Screen Companion · 0123456789  '.repeat(8),10,y+stripe*.7);}
+  source=canvas.captureStream(0);const track=source.getVideoTracks()[0];drawn=0;
+  let due=performance.now();
+  const tick=()=>{
+    // Prime a manually captured canvas until the encoder has started. Repaint
+    // the same pixels for static input, then stop submitting frames entirely.
+    if(!staticSource||drawn<fps*2){const frame=staticSource?0:drawn;ctx.drawImage(pattern,0,-(frame*Math.max(1,width/550)%(stripe*2)));ctx.fillStyle='#ff705e';ctx.fillRect(frame*Math.max(1,width/200)%(width*.85),height*.42,width*.1,height*.18);ctx.fillStyle='white';ctx.fillText(String(frame),10,30);drawn++;track.requestFrame();}
+    due+=1000/fps;if(due<performance.now())due=performance.now()+1000/fps;
+    timer=setTimeout(tick,Math.max(0,due-performance.now()));
+  };tick();return source;
+};
+function row(stats,type){return [...stats.values()].find(s=>s.type===type&&s.kind==='video'&&s.mid==='1');}
+function delta(a,b,key){return Number.isFinite(a?.[key])&&Number.isFinite(b?.[key])?b[key]-a[key]:null;}
+function perFrame(a,b,total,count){const d=delta(a,b,total),n=delta(a,b,count);return d!==null&&d>=0&&n>0?1000*d/n:null;}
+function metric(a,b,stats,type){
+  if(!a||!b)return null;
+  const seconds=(b.timestamp-a.timestamp)/1000,send=type==='outbound-rtp';
+  return {width:b.frameWidth,height:b.frameHeight,fps:delta(a,b,send?'framesEncoded':'framesDecoded')/seconds,
+    mbps:8*delta(a,b,send?'bytesSent':'bytesReceived')/seconds/1e6,codec:stats.get(b.codecId)?.mimeType,
+    format:stats.get(b.codecId)?.sdpFmtpLine,limitation:b.qualityLimitationReason,
+    encodeMs:perFrame(a,b,'totalEncodeTime','framesEncoded'),decodeMs:perFrame(a,b,'totalDecodeTime','framesDecoded'),
+    queueMs:perFrame(a,b,'totalPacketSendDelay','packetsSent'),bufferMs:perFrame(a,b,'jitterBufferDelay','jitterBufferEmittedCount'),freezes:delta(a,b,'freezeCount')};
+}
+function observe(){callback=view.requestVideoFrameCallback((_,m)=>{presented=m.presentedFrames;observe();});}
+async function connect(q,sourceQ=q){
+  sourceQuality=sourceQ;const h=new Call('/api'),g=new Call('/api',s=>{if(s.remoteVideo&&view.srcObject?.getVideoTracks()[0]!==s.remoteVideo)view.srcObject=new MediaStream([s.remoteVideo]);});
+  try{
+    // Follow the product flow: default negotiation, then select quality in the room.
+    await h.start();if(!h.state.roomId)throw Error(h.state.message||'Host failed');await g.start(h.state.roomId);
+    for(let n=0;n<150&&!h.state.connected;n++)await wait(100);
+    if(!h.state.connected)throw Error('Connection timeout');await h.quality(q);await h.share();
+    if(!h.state.sharing)throw Error(h.state.error||'Sharing failed');
+    presented=0;if(view.requestVideoFrameCallback)observe();return {h,g};
+  }catch(e){h.end();g.end();throw e;}
+}
+function cleanup(h,g){h?.end();g?.end();clearTimeout(timer);source?.getTracks().forEach(t=>t.stop());if(callback)view.cancelVideoFrameCallback(callback);view.srcObject=null;}
+async function sample(h,g,q,label,warmup=8,windows=3){
+  const result={label,target:q,staticSource,samples:[]};await wait(warmup*1000);
+  let a=await h.pc.getStats(),ra=await g.pc.getStats(),at=performance.now(),ad=drawn,ap=presented,aq=view.getVideoPlaybackQuality();
+  if(staticSource)result.initialFrameDecoded=(row(ra,'inbound-rtp')?.framesDecoded||0)>0;
+  for(let n=0;n<windows;n++){
+    await wait(3000);const b=await h.pc.getStats(),rb=await g.pc.getStats(),now=performance.now(),seconds=(now-at)/1000;
+    result.samples.push({drawFps:(drawn-ad)/seconds,presentedFps:(presented-ap)/seconds,renderDrops:view.getVideoPlaybackQuality().droppedVideoFrames-aq.droppedVideoFrames,
+      sent:metric(row(a,'outbound-rtp'),row(b,'outbound-rtp'),b,'outbound-rtp'),received:metric(row(ra,'inbound-rtp'),row(rb,'inbound-rtp'),rb,'inbound-rtp')});
+    a=b;ra=rb;at=now;ad=drawn;ap=presented;aq=view.getVideoPlaybackQuality();
+  }
+  result.nearTarget=!staticSource&&result.samples.every(s=>s.sent?.width===q.width&&s.sent?.height===q.height&&s.received?.width===q.width&&s.received?.height===q.height&&s.sent.fps>=q.fps*.95&&s.received.fps>=q.fps*.95&&s.presentedFps>=q.fps*.95);
+  result.connected=h.state.connected&&g.state.connected;report.runs.push(result);out.textContent=JSON.stringify(report,null,2);return result;
+}
+async function matrix(){
+  const cases=[];
+  for(const [width,height,bitrate] of [[320,180,500000],[640,360,1000000],[1280,720,4000000],[1920,1080,8000000],[2560,1440,16000000],[3840,2160,40000000]])
+    for(const fps of [15,30,60])cases.push({label:`${height}p/${fps}`,q:{width,height,fps,bitrate,priority:'maintain-resolution'}});
+  for(const fps of [1,5,10,20,24,25,45])cases.push({label:`1080p/${fps}`,q:{...qualities.auto,fps}});
+  for(const name of ['auto','clear','smooth'])cases.push({label:`preset/${name}`,q:qualities[name]});
+  for(const priority of ['balanced','maintain-resolution','maintain-framerate'])cases.push({label:`bitrate-cap/${priority}`,q:{width:1280,height:720,fps:60,bitrate:500000,priority}});
+  cases.push({label:'static/1080p30',q:qualities.auto,static:true});
+  for(let i=0;i<cases.length;i++){
+    const c=cases[i];progress.textContent=`${i+1}/${cases.length} ${c.label}`;staticSource=!!c.static;let h,g;
+    try{({h,g}=await connect(c.q));await sample(h,g,c.q,c.label);}finally{cleanup(h,g);}
+  }
+}
+async function switching(){
+  staticSource=false;let h,g;
+  try{
+    ({h,g}=await connect(qualities.auto,qualities.uhd60));const track=h.display.getVideoTracks()[0],sender=h.video.sender,mid=h.video.mid,receiver=g.state.remoteVideo;
+    const cases=[{...qualities.auto,width:1280,height:720,fps:15,bitrate:2000000},qualities.auto,{...qualities.clear,fps:60},qualities.uhd,{...qualities.smooth,width:1280,height:720},qualities.auto,{...qualities.auto,bitrate:2000000}];
+    for(const q of cases){
+      progress.textContent=`切换 ${q.width}×${q.height}/${q.fps}/${q.bitrate}`;
+      const start=performance.now();await h.quality(q);const applyMs=performance.now()-start;
+      const result=await sample(h,g,q,`switch/${q.height}p/${q.fps}/${q.bitrate}`,4,2);
+      result.applyMs=applyMs;result.sameTrack=track===h.display.getVideoTracks()[0]&&sender===h.video.sender&&mid===h.video.mid&&receiver===g.state.remoteVideo;
+      result.settings=track.getSettings();out.textContent=JSON.stringify(report,null,2);
+    }
+  }finally{cleanup(h,g);}
+}
+async function buffers(){
+  staticSource=false;const q={...qualities.clear,fps:30};
+  for(const target of [null,0,null,0]){
+    let h,g;progress.textContent=`1440p30 接收缓冲目标 ${target===null?'浏览器默认':target+' ms'}`;
+    try{
+      ({h,g}=await connect(q));const receiver=g.pc.getTransceivers().find(t=>t.mid==='1').receiver;
+      if(target!==null){if(!('jitterBufferTarget' in receiver))throw Error('jitterBufferTarget is unavailable');receiver.jitterBufferTarget=target;}
+      await sample(h,g,q,`buffer/${target===null?'default':target}`,8,3);
+    }finally{cleanup(h,g);}
+  }
+}
+async function stationary(){
+  staticSource=true;let h,g;
+  try{({h,g}=await connect(qualities.auto));await sample(h,g,qualities.auto,'static/1080p30');}finally{cleanup(h,g);}
+}
+async function execute(kind){
+  document.querySelectorAll('button').forEach(b=>b.disabled=true);delete document.body.dataset.done;report.runs=[];report.kind=kind;
+  audio=new AudioContext();await audio.resume();
+  try{await (kind==='matrix'?matrix():kind==='switch'?switching():kind==='buffer'?buffers():stationary());document.body.dataset.done='true';progress.textContent='完成。nearTarget 仅表示本次所有短窗口均保住目标尺寸且帧率 ≥95%，不是跨设备保证。';}
+  catch(e){document.body.dataset.done='error';report.error=e.stack;out.textContent=JSON.stringify(report,null,2);}
+  finally{await audio.close();document.querySelectorAll('button').forEach(b=>b.disabled=false);}
+}
+document.querySelector('#run').onclick=()=>execute('matrix');document.querySelector('#switch').onclick=()=>execute('switch');
+document.querySelector('#buffer').onclick=()=>execute('buffer');
+document.querySelector('#static').onclick=()=>execute('static');
+</script>

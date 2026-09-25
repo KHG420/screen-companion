@@ -142,8 +142,35 @@ test('capable browsers prefer an efficient H264 profile while preserving fallbac
   const old=Object.getOwnPropertyDescriptor(globalThis,'navigator'),oldSender=globalThis.RTCRtpSender;
   const codecs=[{mimeType:'video/VP8'},{mimeType:'video/H264',sdpFmtpLine:'packetization-mode=1;profile-level-id=42e01f'},{mimeType:'video/rtx'},{mimeType:'video/H264',sdpFmtpLine:'level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=640034'}];let probes=0,preferred;
   globalThis.RTCRtpSender={getCapabilities:()=>({codecs})};Object.defineProperty(globalThis,'navigator',{configurable:true,value:{mediaCapabilities:{encodingInfo:async q=>{probes++;assert.equal(q.video.framerate,60);assert.equal(q.video.width,3840);return {supported:true,smooth:true,powerEfficient:q.video.contentType.includes('640034')};},decodingInfo:async()=>({supported:true,smooth:true,powerEfficient:true})}}});
-  try{const c=new Call('/api');const video={setCodecPreferences:p=>preferred=p};await c.configureScreenCodecs(video);await c.configureScreenCodecs(video);assert.equal(probes,2);assert.deepEqual(preferred,[codecs[3],codecs[1],codecs[0],codecs[2]]);assert.equal(codecs[0].mimeType,'video/VP8');}
+  try{const c=new Call('/api');await c.quality('uhd60');const video={setCodecPreferences:p=>preferred=p};await c.configureScreenCodecs(video);await c.configureScreenCodecs(video);assert.equal(probes,2);assert.deepEqual(preferred,[codecs[3],codecs[1],codecs[0],codecs[2]]);assert.equal(codecs[0].mimeType,'video/VP8');}
   finally{globalThis.RTCRtpSender=oldSender;if(old)Object.defineProperty(globalThis,'navigator',old);else delete globalThis.navigator;}
+});
+
+test('1080p hardware is not excluded by an unrelated 4K60 capability gate',async()=>{
+  const old=Object.getOwnPropertyDescriptor(globalThis,'navigator'),oldSender=globalThis.RTCRtpSender;
+  const codecs=[{mimeType:'video/VP8'},{mimeType:'video/H264',sdpFmtpLine:'packetization-mode=1;profile-level-id=42001f'}];const probes=[];let preferred;
+  const probe=async ({video})=>{probes.push(video);return {supported:video.width<=1920,smooth:video.framerate<=30,powerEfficient:true};};
+  globalThis.RTCRtpSender={getCapabilities:()=>({codecs})};Object.defineProperty(globalThis,'navigator',{configurable:true,value:{mediaCapabilities:{encodingInfo:probe,decodingInfo:probe}}});
+  try{const c=new Call('/api'),video={setCodecPreferences:p=>preferred=p};await c.configureScreenCodecs(video);assert.deepEqual(preferred,[codecs[1],codecs[0]]);assert.equal(probes[0].width,1920);assert.equal(probes[0].height,1080);assert.equal(probes[0].framerate,30);assert.equal(probes[0].bitrate,8_000_000);
+    await c.quality({...c.state.quality,width:1280,height:720,fps:15,bitrate:2_000_000});await c.configureScreenCodecs(video);assert.equal(probes.at(-1).width,1280);assert.equal(probes.at(-1).framerate,15);assert.equal(probes.at(-1).bitrate,2_000_000);
+  }finally{globalThis.RTCRtpSender=oldSender;if(old)Object.defineProperty(globalThis,'navigator',old);else delete globalThis.navigator;}
+});
+
+test('all supported FPS values preserve independent size, bitrate and adaptation policy',async()=>{
+  const c=new Call('/api');let constraints={},parameters,captures=0;
+  const track={getSettings:()=>({width:3840,height:2160}),getConstraints:()=>constraints,applyConstraints:async p=>{constraints=p;captures++;}};
+  c.display={getVideoTracks:()=>[track]};c.video={sender:{track,getParameters:()=>({encodings:[{}]}),setParameters:async p=>{parameters=p;}}};
+  for(const [width,height] of [[320,180],[640,360],[1280,720],[1920,1080],[2560,1440],[3840,2160]])
+    for(const priority of ['balanced','maintain-resolution','maintain-framerate'])
+      for(let fps=1;fps<=60;fps++){
+        const q={width,height,fps,bitrate:500_000+fps*100_000,priority};await c.quality(q);
+        assert.deepEqual(c.state.quality,q);assert.equal(constraints.width.max,width);assert.equal(constraints.height.max,height);assert.equal(constraints.frameRate.max,fps);
+        assert.equal(parameters.encodings[0].maxFramerate,fps);assert.equal(parameters.encodings[0].maxBitrate,q.bitrate);assert.equal(parameters.degradationPreference,priority);
+        assert.equal(track.contentHint,priority==='maintain-resolution'&&fps<=30?'detail':'motion');
+        assert.equal(parameters.encodings[0].scaleResolutionDownBy,3840/width);
+        const before=captures;await c.quality({...q,bitrate:80_000_000});assert.equal(captures,before);assert.equal(parameters.encodings[0].maxBitrate,80_000_000);
+      }
+  assert.equal(c.video.sender.track,track);
 });
 
 test('unsupported capability probes and hangup during probing preserve call fallback',async()=>{

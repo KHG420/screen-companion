@@ -292,10 +292,11 @@ class RtcSession(
         val (width, height) = captureSize()
         source.adaptOutputFormat(width, height, quality.fps)
         adaptedFormat = Triple(width, height, quality.fps)
+        // Apply the selected bitrate/FPS before capture can submit its first frame.
+        applyEncoding()
         screen.startCapture(width, height, quality.fps)
         captureDimensions = width to height
         startPlaybackAudio(checkNotNull(screen.mediaProjection))
-        applyEncoding()
     }
     @Suppress("MissingPermission") // RECORD_AUDIO is granted before starting the call.
     private fun startPlaybackAudio(projection: MediaProjection) {
