@@ -29,6 +29,21 @@ export function videoRate(current, previous) {
     fps:valid ? (frames-previous.frames)/elapsed : null,
     mbps:valid ? (bytes-previous.bytes)*8/elapsed/1e6 : null };
 }
+// Cumulative RTC counters need interval deltas; lifetime averages hide a recent stall.
+export function videoTiming(current, previous) {
+  if (!previous || current.timestamp <= previous.timestamp) return '';
+  const fields = current.type === 'outbound-rtp'
+    ? [['totalEncodeTime','framesEncoded','编码/帧'],['totalPacketSendDelay','packetsSent','发送排队/包']]
+    : [['totalDecodeTime','framesDecoded','解码/帧'],['jitterBufferDelay','jitterBufferEmittedCount','接收缓冲/帧']];
+  const parts=[];
+  for (const [total,count,label] of fields) {
+    const duration=current[total]-previous[total], samples=current[count]-previous[count];
+    if (Number.isFinite(duration) && duration>=0 && Number.isFinite(samples) && samples>0) parts.push(`${label} ${(duration*1000/samples).toFixed(0)} ms`);
+  }
+  const freezes=current.freezeCount-previous.freezeCount;
+  if (Number.isFinite(freezes) && freezes>0) parts.push(`本周期冻结 ${freezes} 次`);
+  return parts.join(' · ');
+}
 export function friendly(error) {
   if (error instanceof ApiError) return error.message;
   if (error?.name === 'AbortError') return '连接超时，请检查网络后重试。';
@@ -273,8 +288,14 @@ export class Call {
     const track = this.display?.getVideoTracks()[0];
     if (track) {
       const bounds = captureBounds(q, track.getSettings());
-      track.contentHint = q.priority === 'maintain-framerate' ? 'motion' : 'detail';
-      await track.applyConstraints({ width:{ideal:bounds.width,max:bounds.width}, height:{ideal:bounds.height,max:bounds.height}, frameRate:{ideal:q.fps,max:q.fps} });
+      // A detail hint makes libwebrtc treat BALANCED as MAINTAIN_RESOLUTION.
+      // Motion content keeps the explicitly selected adaptation policy effective.
+      track.contentHint = q.priority === 'maintain-resolution' ? 'detail' : 'motion';
+      const next = { width:{ideal:bounds.width,max:bounds.width}, height:{ideal:bounds.height,max:bounds.height}, frameRate:{ideal:q.fps,max:q.fps} };
+      const current = track.getConstraints();
+      if (Object.keys(next).some(key => current[key]?.ideal !== next[key].ideal || current[key]?.max !== next[key].max)) {
+        await track.applyConstraints(next);
+      }
     }
     if (this.video?.sender.track) {
       const p = this.video.sender.getParameters();
@@ -335,16 +356,18 @@ export class Call {
         const active = direction === 'outbound-rtp' ? this.state.sharing : this.state.remoteSharing;
         const rows = [...report.values()].filter(r=>r.type===direction && r.kind==='video' && !r.isRemote && r.mid === this.video?.mid);
         for (const r of rows) {
-          const rate=videoRate(r,this.videoSamples.get(r.id));this.videoSamples.set(r.id,rate);
+          const previous=this.videoSamples.get(r.id);
+          const rate=videoRate(r,previous);this.videoSamples.set(r.id,{...r,...rate});
           if (!active || !r.frameWidth) continue;
           const why={cpu:'设备编码性能受限',bandwidth:'网络带宽受限',other:'编码器调整中'}[r.qualityLimitationReason];
           lines.push(`${direction==='outbound-rtp'?'发送':'接收'} ${r.frameWidth}×${r.frameHeight} · ${rate.fps===null?'测量中':rate.fps.toFixed(1)+' FPS'} · ${rate.mbps===null?'测量中':rate.mbps.toFixed(2)+' Mbps'}${why?' · '+why:''}`);
+          const timing=videoTiming(r,previous);if(timing)lines.push(timing);
         }
       }
-      this.update({mediaStats:lines.join('；') || ((this.state.sharing||this.state.remoteSharing)?'正在测量视频…':'')});
-      if (!pair) return;
+      const patch={mediaStats:lines.join('；') || ((this.state.sharing||this.state.remoteSharing)?'正在测量视频…':'')};
+      if (!pair) {this.update(patch);return;}
       const relay = [report.get(pair.localCandidateId), report.get(pair.remoteCandidateId)].some(c => c?.candidateType === 'relay');
-      this.update({ network: `${relay ? '中转连接' : '直接连接'}${pair.currentRoundTripTime == null ? '' : ` · 网络往返 ${Math.round(pair.currentRoundTripTime * 1000)} ms`}` });
+      this.update({ ...patch, network: `${relay ? '中转连接' : '直接连接'}${pair.currentRoundTripTime == null ? '' : ` · 网络往返 ${Math.round(pair.currentRoundTripTime * 1000)} ms`}` });
     } catch { /* Statistics do not control call lifetime. */ }
   }
   fail(message) { this.end(message, true, true); }

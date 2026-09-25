@@ -4,7 +4,7 @@
 
 Two-person screen sharing, camera video calls, and text/voice chat for Android and desktop browsers. Create a room, share its eight-digit code, talk, and take turns sharing a screen. The Android client uses Kotlin and Jetpack Compose; the desktop client uses native JavaScript and WebRTC. Both use the same Go signaling service built with the standard library.
 
-Version **0.4.1** is a development and testing release. It does not include accounts, remote control, or recording storage. Screen video, microphone audio, and supported shared media audio travel over WebRTC. HTTP long polling exchanges only SDP, ICE candidates, and sharing state; the signaling server does not forward media. Devices connect directly when possible, with TURN as a fallback. High resolution and low latency are not guaranteed across physical devices and networks.
+Version **0.4.2** is a development and testing release. It does not include accounts, remote control, or recording storage. Screen video, microphone audio, and supported shared media audio travel over WebRTC. HTTP long polling exchanges only SDP, ICE candidates, and sharing state; the signaling server does not forward media. Devices connect directly when possible, with TURN as a fallback. High resolution and low latency are not guaranteed across physical devices and networks.
 
 ## Self-hosting and supported platforms
 
@@ -75,6 +75,8 @@ Presets:
 | 4K | 2160p | 30 | 24 Mbps |
 
 The call screen separates target settings from actual sent/received resolution, FPS, and Mbps, and reports known CPU or bandwidth limitations. These are targets, not guarantees: 4K requires a suitable source and encoder/decoder, while 60 FPS needs changing content and sufficient performance. Both may not be achievable together. Static screens can legitimately use fewer frames and less bitrate. Invalid input is rejected. If a device rejects a combination, the client attempts to restore the previous settings; if restoration fails, screen sharing stops while voice can continue.
+
+Version 0.4.2 uses motion-oriented encoding for Balanced/Frame-rate priority, while Detail priority retains screen-text encoding. Balanced can reduce resolution and/or FPS under load; no fixed quality downgrade is applied. Bitrate-only updates preserve capture constraints. Call statistics show interval averages for encode/decode time per frame, send queue time per packet, and receive buffer time per frame. These are separate pipeline measurements, not end-to-end latency.
 
 ## Build the Android APK
 
@@ -150,3 +152,5 @@ The Android client uses `io.github.webrtc-sdk:android:144.7559.15`, AndroidX, an
 Use Android Studio's Device Manager to install the official emulator and Android system images and create two independent AVDs. Emulators can reach the host's local service at `http://10.0.2.2:8080`; configure this address in the app yourself.
 
 `scripts/start-emulator.sh` is a development helper that expects an SDK at `.tools/android-sdk`, AVD data at `.tools/avds`, and pre-created `codex-screenshare-host` and `codex-screenshare-viewer` devices. These tools and device files are not distributed with the repository. Emulator tests do not replace physical-device performance, echo cancellation, Bluetooth routing, or mobile-network validation.
+
+Release builds enable R8 code optimization and resource shrinking. Build with `./gradlew :app:assembleRelease`; configure your signing separately. A locally debug-signed release remains a testing distribution. The reproducible browser motion/codec benchmark is `web/tests/performance.html` (local development only).

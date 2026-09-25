@@ -60,7 +60,7 @@ test('quality validates independent targets, including 4K and arbitrary frame ra
 test('live quality updates sender and capture, restoring previous settings on rejection', async () => {
   const {qualities}=await import('../call.js');
   const c=new Call('/api');let constraints,parameters,fail=false;
-  c.display={getVideoTracks:()=>[{getSettings:()=>({width:3840,height:2160}),applyConstraints:async p=>{constraints=p;}}]};
+  c.display={getVideoTracks:()=>[{getSettings:()=>({width:3840,height:2160}),getConstraints:()=>constraints||{},applyConstraints:async p=>{constraints=p;}}]};
   c.video={sender:{track:{},getParameters:()=>({encodings:[{}]}),setParameters:async p=>{if(fail&&p.encodings[0].maxFramerate===60)throw new Error('unsupported');parameters=p;}}};
   await c.quality({...qualities.uhd,fps:25});
   assert.equal(constraints.frameRate.max,25);assert.equal(parameters.encodings[0].maxBitrate,24_000_000);
@@ -103,4 +103,23 @@ test('hangup while camera permission pending stops late capture', async () => {
     resolve({getTracks:()=>[{stop:()=>stopped=true}]});await pending;
     assert.equal(stopped,true);assert.equal(replaced,false);
   }finally{if(old)Object.defineProperty(globalThis,'navigator',old);else delete globalThis.navigator;}
+});
+
+test('balanced screen content permits motion adaptation and bitrate-only changes preserve capture', async () => {
+  const c=new Call('/api');let constraints={},captures=0,params;
+  const track={getSettings:()=>({width:1920,height:1080}),getConstraints:()=>constraints,applyConstraints:async q=>{constraints=q;captures++;}};
+  c.display={getVideoTracks:()=>[track]};c.video={sender:{track,getParameters:()=>({encodings:[{}]}),setParameters:async p=>{params=p;}}};
+  await c.quality('auto');assert.equal(track.contentHint,'motion');assert.equal(params.degradationPreference,'balanced');assert.equal(captures,1);
+  await c.quality({...c.state.quality,bitrate:4_000_000});assert.equal(captures,1);assert.equal(params.encodings[0].maxBitrate,4_000_000);
+  await c.quality({...c.state.quality,priority:'maintain-resolution'});assert.equal(track.contentHint,'detail');assert.equal(captures,1);
+  await c.quality({...c.state.quality,fps:24});assert.equal(captures,2);assert.equal(constraints.frameRate.max,24);
+});
+
+test('timing reports interval averages and ignores missing/reset counters',async()=>{
+  const {videoTiming}=await import('../call.js');
+  const a={type:'outbound-rtp',timestamp:1000,framesEncoded:10,totalEncodeTime:.2,packetsSent:100,totalPacketSendDelay:1};
+  const b={...a,timestamp:4000,framesEncoded:70,totalEncodeTime:1.4,packetsSent:400,totalPacketSendDelay:2.5};
+  assert.equal(videoTiming(b,a),'编码/帧 20 ms · 发送排队/包 5 ms');
+  assert.equal(videoTiming({...a,timestamp:5000},b),'');assert.equal(videoTiming(a), '');assert.equal(videoTiming(a,a),'');
+  assert.equal(videoTiming({type:'inbound-rtp',timestamp:2000,framesDecoded:20,totalDecodeTime:.2,jitterBufferEmittedCount:20,jitterBufferDelay:1,freezeCount:1}, {timestamp:1000,framesDecoded:10,totalDecodeTime:.1,jitterBufferEmittedCount:10,jitterBufferDelay:.5,freezeCount:0}), '解码/帧 10 ms · 接收缓冲/帧 50 ms · 本周期冻结 1 次');
 });

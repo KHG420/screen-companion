@@ -66,7 +66,8 @@ class RtcSession(
     private var playbackRecord: AudioRecord? = null
     private val playbackSamples = ShortArray(480) // 10 ms at the ADM input rate.
     private var quality = Quality.AUTO
-    private val videoSamples = mutableMapOf<String, Triple<Double, Long, Long>>()
+    private data class VideoSample(val time: Double, val bytes: Long, val frames: Long, val counters: Map<String, Double>)
+    private val videoSamples = mutableMapOf<String, VideoSample>()
     private val displays = context.getSystemService(DisplayManager::class.java)
     private val displayListener = object : DisplayManager.DisplayListener {
         override fun onDisplayAdded(id: Int) = Unit
@@ -282,7 +283,9 @@ class RtcSession(
         })
         capturer = screen
         val helper = SurfaceTextureHelper.create("ScreenCapture", egl.eglBaseContext).also { captureHelper = it }
-        val source = factory.createVideoSource(true).also { videoSource = it }
+        // WebRTC treats BALANCED + screencast as MAINTAIN_RESOLUTION. Use the
+        // motion content path unless the user explicitly prioritizes text/detail.
+        val source = factory.createVideoSource(quality.priority == VideoPriority.RESOLUTION).also { videoSource = it }
         screen.initialize(helper, context, source.capturerObserver)
         val track = factory.createVideoTrack("screen", source).also { localVideo = it }
         check(videoSender?.setTrack(track, false) == true) { "无法连接屏幕轨道" }
@@ -319,6 +322,7 @@ class RtcSession(
         try { record.stop() } finally { record.release() }
     }
     fun setQuality(value: Quality) {
+        if (value == quality) return
         val old = quality
         try {
             quality = value; updateCaptureSize(); applyEncoding()
@@ -357,6 +361,7 @@ class RtcSession(
         }
     }
     private fun applyEncoding() {
+        videoSource?.setIsScreencast(quality.priority == VideoPriority.RESOLUTION)
         val sender = videoSender ?: return
         val p = sender.parameters
         p.degradationPreference = when (quality.priority) {
@@ -401,15 +406,33 @@ class RtcSession(
                 val sending = row.type == "outbound-rtp"
                 val bytes = (m[if (sending) "bytesSent" else "bytesReceived"] as? Number)?.toLong() ?: 0L
                 val frames = (m[if (sending) "framesEncoded" else "framesDecoded"] as? Number)?.toLong() ?: 0L
-                val old = videoSamples.put(row.id, Triple(row.timestampUs, bytes, frames))
-                val elapsed = old?.let { (row.timestampUs-it.first)/1_000_000.0 } ?: 0.0
-                val fresh = elapsed > 0 && old != null && bytes >= old.second && frames >= old.third
+                val counters = m.mapNotNull { (key, value) -> (value as? Number)?.toDouble()?.let { key to it } }.toMap()
+                val old = videoSamples.put(row.id, VideoSample(row.timestampUs, bytes, frames, counters))
+                val elapsed = old?.let { (row.timestampUs-it.time)/1_000_000.0 } ?: 0.0
+                val fresh = elapsed > 0 && old != null && bytes >= old.bytes && frames >= old.frames
                 val width = (m["frameWidth"] as? Number)?.toInt()
                 val height = (m["frameHeight"] as? Number)?.toInt()
-                if (width != null && height != null && ((!sending && fresh && bytes > old!!.second) || (sending && capturer != null))) {
-                    val rate = if (fresh) String.format(java.util.Locale.ROOT, "%.1f FPS · %.2f Mbps", (frames-old!!.third)/elapsed, (bytes-old.second)*8/elapsed/1e6) else "测量中"
+                if (width != null && height != null && ((!sending && fresh && bytes > old!!.bytes) || (sending && capturer != null))) {
+                    val rate = if (fresh) String.format(java.util.Locale.ROOT, "%.1f FPS · %.2f Mbps", (frames-old!!.frames)/elapsed, (bytes-old.bytes)*8/elapsed/1e6) else "测量中"
                     val reason = when(m["qualityLimitationReason"]) { "cpu" -> " · 设备编码性能受限"; "bandwidth" -> " · 网络带宽受限"; else -> "" }
+                    val timing = mutableListOf<String>()
+                    fun elapsedMs(total: String, count: String, label: String) {
+                        val before = old?.counters ?: return
+                        val duration = counters[total]?.minus(before[total] ?: return) ?: return
+                        val samples = counters[count]?.minus(before[count] ?: return) ?: return
+                        if (duration >= 0 && samples > 0) timing += "$label ${String.format(java.util.Locale.ROOT, "%.0f", duration * 1000 / samples)} ms"
+                    }
+                    if (sending) {
+                        elapsedMs("totalEncodeTime", "framesEncoded", "编码/帧")
+                        elapsedMs("totalPacketSendDelay", "packetsSent", "发送排队/包")
+                    } else {
+                        elapsedMs("totalDecodeTime", "framesDecoded", "解码/帧")
+                        elapsedMs("jitterBufferDelay", "jitterBufferEmittedCount", "接收缓冲/帧")
+                        val freezes = counters["freezeCount"]?.minus(old?.counters?.get("freezeCount") ?: 0.0)?.toInt() ?: 0
+                        if (freezes > 0) timing += "本周期冻结 $freezes 次"
+                    }
                     lines += "${if(sending) "发送" else "接收"} ${width}×${height} · ${rate}${reason}"
+                    if (timing.isNotEmpty()) lines += timing.joinToString(" · ")
                 }
             }
             if (capturer != null) {
