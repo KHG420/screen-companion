@@ -4,7 +4,7 @@
 
 Two-person screen sharing, camera video calls, and text/voice chat for Android and desktop browsers. Create a room, share its eight-digit code, talk, and take turns sharing a screen. The Android client uses Kotlin and Jetpack Compose; the desktop client uses native JavaScript and WebRTC. Both use the same Go signaling service built with the standard library.
 
-Version **0.4.0** is a development and testing release. It does not include accounts, remote control, or recording storage. Screen video, microphone audio, and supported shared media audio travel over WebRTC. HTTP long polling exchanges only SDP, ICE candidates, and sharing state; the signaling server does not forward media. Devices connect directly when possible, with TURN as a fallback. High resolution and low latency are not guaranteed across physical devices and networks.
+Version **0.4.1** is a development and testing release. It does not include accounts, remote control, or recording storage. Screen video, microphone audio, and supported shared media audio travel over WebRTC. HTTP long polling exchanges only SDP, ICE candidates, and sharing state; the signaling server does not forward media. Devices connect directly when possible, with TURN as a fallback. High resolution and low latency are not guaranteed across physical devices and networks.
 
 ## Self-hosting and supported platforms
 

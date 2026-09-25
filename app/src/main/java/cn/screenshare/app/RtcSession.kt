@@ -12,6 +12,7 @@ import android.os.Process
 import android.os.Handler
 import android.os.Looper
 import android.util.DisplayMetrics
+import android.view.Display
 import android.view.WindowManager
 import kotlinx.coroutines.suspendCancellableCoroutine
 import org.json.JSONObject
@@ -57,6 +58,8 @@ class RtcSession(
     private val pendingIce = mutableListOf<IceCandidate>()
     private var capturer: ScreenCapturerAndroid? = null
     private var captureHelper: SurfaceTextureHelper? = null
+    private var captureDimensions: Pair<Int, Int>? = null
+    private var adaptedFormat: Triple<Int, Int, Int>? = null
     private var videoSource: VideoSource? = null
     private var localVideo: VideoTrack? = null
     private val playbackLock = Any()
@@ -68,7 +71,9 @@ class RtcSession(
     private val displayListener = object : DisplayManager.DisplayListener {
         override fun onDisplayAdded(id: Int) = Unit
         override fun onDisplayRemoved(id: Int) = Unit
-        override fun onDisplayChanged(id: Int) { if (capturer != null) updateCaptureSize() }
+        override fun onDisplayChanged(id: Int) {
+            if (id == Display.DEFAULT_DISPLAY && capturer != null) updateCaptureSize()
+        }
     }
 
     init {
@@ -283,7 +288,9 @@ class RtcSession(
         check(videoSender?.setTrack(track, false) == true) { "无法连接屏幕轨道" }
         val (width, height) = captureSize()
         source.adaptOutputFormat(width, height, quality.fps)
+        adaptedFormat = Triple(width, height, quality.fps)
         screen.startCapture(width, height, quality.fps)
+        captureDimensions = width to height
         startPlaybackAudio(checkNotNull(screen.mediaProjection))
         applyEncoding()
     }
@@ -329,11 +336,25 @@ class RtcSession(
         return quality.captureSize(metrics.widthPixels, metrics.heightPixels)
     }
     private fun updateCaptureSize() {
-        if (capturer == null) return
-        val (w,h) = captureSize()
-        // ScreenCapturerAndroid ignores FPS; the source adapter enforces the capture frame limit.
-        videoSource?.adaptOutputFormat(w,h,quality.fps)
-        capturer?.changeCaptureFormat(w,h,quality.fps)
+        val screen = capturer ?: return
+        val source = videoSource ?: return
+        val dimensions = captureSize()
+        val (w, h) = dimensions
+        val format = Triple(w, h, quality.fps)
+        // FPS is enforced by the source adapter; changing it must not reset the capture surface.
+        if (adaptedFormat != format) {
+            adaptedFormat = null // A failed native call must be retried when restoring the old quality.
+            source.adaptOutputFormat(w, h, quality.fps)
+            adaptedFormat = format
+        }
+        // WebRTC synchronously resizes/rebinds the virtual display even for identical dimensions.
+        // Display state notifications and bitrate-only changes must leave that surface intact.
+        if (captureDimensions != dimensions) {
+            captureDimensions = null
+            if (BuildConfig.DEBUG) android.util.Log.d("CaptureResizeProbe", "resize ${w}x${h} fps=${quality.fps}")
+            screen.changeCaptureFormat(w, h, quality.fps)
+            captureDimensions = dimensions
+        }
     }
     private fun applyEncoding() {
         val sender = videoSender ?: return
@@ -350,6 +371,8 @@ class RtcSession(
         stopPlaybackAudio()
         val old = capturer ?: return
         capturer = null // Projection callback must not recursively stop this capture.
+        captureDimensions = null
+        adaptedFormat = null
         videoSender?.setTrack(null, false)
         try { old.stopCapture() } finally {
             old.dispose(); localVideo?.dispose(); localVideo = null
