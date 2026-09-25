@@ -1,0 +1,16 @@
+# Replace domain, secret, and public IP before use. Keep this outside version control.
+listening-port=3478
+fingerprint
+use-auth-secret
+static-auth-secret=REPLACE_WITH_RANDOM_SECRET
+realm=share.example.com
+# external-ip=PUBLIC_IP/PRIVATE_IP
+min-port=49160
+max-port=49200
+no-multicast-peers
+no-loopback-peers
+no-cli
+user-quota=4
+total-quota=200
+# TLS is optional for the first UDP/TCP deployment; add certificate/key and a
+# turns: URL for restrictive networks. Do not enable anonymous open relay.

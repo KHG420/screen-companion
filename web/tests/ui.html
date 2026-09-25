@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><base href="/"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#fff9f0"><title>同屏 · 屏幕共享与语音</title><link rel="stylesheet" href="style.css"></head>
+<body>
+<header><a class="brand" href="./" aria-label="同屏首页"><svg viewBox="0 0 32 32" aria-hidden="true"><rect x="3" y="5" width="21" height="16" rx="3"/><path d="M11 26h15a3 3 0 0 0 3-3V12M10 21v5"/></svg>同屏</a><span id="status" role="status">双人屏幕共享与语音</span></header>
+<main>
+<div id="message" role="alert" hidden></div>
+<section id="home" class="home">
+<div class="intro"><h1>一起看，<br>慢慢聊。</h1><p>共享屏幕，也分享陪伴。<br>电脑和安卓，输入房间号就能连接。</p><img class="home-puppies" src="assets/puppies-home.png" alt="小白和小金毛靠在一起看电脑"></div>
+<div class="entry"><h2>开始一场同屏</h2><button id="create" class="primary">创建房间</button><div class="separator">或加入对方的房间</div><form id="join-form"><label for="room-input">八位房间号</label><input id="room-input" name="room" inputmode="numeric" autocomplete="off" maxlength="9" placeholder="0000 0000" pattern="[0-9 ]{8,9}" required aria-describedby="join-hint"><button id="join" type="submit">加入房间</button></form><p id="join-hint" class="hint">每个房间最多两人。连接时需要麦克风权限。</p></div>
+</section>
+<section id="call" hidden>
+<div class="room-bar"><div><span class="hint">房间号</span><strong id="room-code"></strong><button id="copy" class="quiet">复制房间号</button></div><span id="network">等待连接</span></div>
+<div id="stage" class="stage"><video id="screen" autoplay playsinline muted hidden></video><div id="empty"><img class="waiting-puppies" src="assets/puppies-wait.png" alt="小白牵着小金毛，招呼对方一起同屏"><h2 id="stage-title">等待对方加入</h2><p id="stage-description">把上方房间号告诉对方，即可开始语音。</p></div><div id="screen-label" hidden></div><button id="fullscreen" class="overlay" hidden>全屏查看</button></div>
+<audio id="remote-audio" autoplay></audio><button id="play-audio" hidden>点击播放对方声音</button>
+<div class="controls"><div class="control-group"><button id="share" class="primary" disabled>共享我的屏幕</button><button id="mute" aria-pressed="false">关闭麦克风</button></div><div class="control-group"><label for="quality">画质</label><select id="quality"><option value="auto">均衡 · 1080p / 30 帧</option><option value="clear">文字 · 1440p / 24 帧</option><option value="smooth">动态 · 1080p / 60 帧</option><option value="uhd">4K · 2160p / 30 帧</option><option value="custom" disabled>自定义</option></select><button id="hangup" class="danger">结束通话</button></div></div>
+<details id="quality-details"><summary>精确调整画质</summary>
+<form id="quality-form">
+<p class="hint">调整自己共享的画面；分辨率、帧率、码率独立设置。按比例适配竖屏，不拉伸或放大低分辨率源。</p>
+<div class="quality-fields">
+<div><label for="resolution">分辨率快捷选择</label><select id="resolution"><option value="1280,720">720p</option><option value="1920,1080" selected>1080p</option><option value="2560,1440">1440p</option><option value="3840,2160">4K / 2160p</option><option value="custom">自定义尺寸</option></select></div>
+<div><label for="long-edge">长边上限（像素）</label><input id="long-edge" type="number" min="320" max="3840" step="2" value="1920" required></div>
+<div><label for="short-edge">短边上限（像素）</label><input id="short-edge" type="number" min="180" max="2160" step="2" value="1080" required></div>
+<div><label for="fps">目标帧率（1–60 FPS）</label><input id="fps" type="number" min="1" max="60" step="1" list="fps-options" value="30" required><datalist id="fps-options"><option value="15"><option value="24"><option value="30"><option value="60"></datalist></div>
+<div><label for="bitrate">码率上限（0.5–80 Mbps）</label><input id="bitrate" type="number" min="0.5" max="80" step="0.1" value="8" required></div>
+<div><label for="priority">资源不足时</label><select id="priority"><option value="balanced">自动平衡</option><option value="maintain-resolution">清晰优先 · 允许降帧</option><option value="maintain-framerate">帧率优先 · 允许降清晰度</option></select></div>
+</div><button id="apply-quality" type="submit">应用画质</button><p id="quality-result" role="status"></p>
+</form></details>
+<p id="quality-target" class="hint"></p><p id="media-stats" class="hint"></p><p id="quality-note" class="hint"></p>
+<p class="hint">参数为目标上限，实际能力取决于共享源、编码器和网络。4K / 60 FPS 不保证同时达到；静止画面可能降低发送帧率。无法完全关闭 WebRTC 拥塞控制。</p>
+<p id="share-hint" class="hint">共享声音：优先使用 Chrome / Edge，选择标签页并勾选“同时分享音频”。其他共享方式取决于浏览器和系统。</p>
+</section>
+<footer><span>优先设备直连 · 无法直连时使用备用中转</span><span>屏幕只在你授权后共享</span></footer>
+</main><script type="module">
+let audio;
+navigator.mediaDevices.getUserMedia=async()=>{
+ audio ||= new AudioContext();await audio.resume();
+ const tone=audio.createOscillator(),gain=audio.createGain(),dest=audio.createMediaStreamDestination();
+ tone.frequency.value=440;gain.gain.value=.10;tone.connect(gain).connect(dest);tone.start();
+ return dest.stream;
+};
+history.replaceState({},'', '/');
+await import('/app.js');
+window.addEventListener('pagehide',()=>audio?.close());
+</script>
+</body></html>

@@ -1,0 +1,126 @@
+# Screen Companion · 同屏
+
+[English](README.md) | **简体中文**
+
+电脑浏览器和安卓客户端创建/加入同一个双人房间，双向语音通话，并轮流共享屏幕。安卓使用 Kotlin / Jetpack Compose，电脑端使用原生 JavaScript / WebRTC，两端共用 Go 标准库信令服务。
+
+这是可继续开发和测试的 0.3.0 测试版。不含账号、远程控制或录屏存储。共享时支持采集 Android 10+ 允许捕获的媒体/游戏声音，并与麦克风混合发送。没有真机验证的高清/低延迟承诺。屏幕视频、麦克风及共享媒体声音经 WebRTC 传输，信令 HTTP 长轮询只交换 SDP、ICE 和共享状态，不转发媒体。
+
+## 自行部署与使用
+
+本仓库不提供公共测试服务或预配置的服务地址。请自行部署信令服务和网页，构建安卓 APK，并在安卓“连接设置”中填写自己的服务器地址。部署模板见 [deploy](deploy/)。
+
+电脑推荐 Windows、macOS、Linux 的新版 Chrome / Edge，无需安装原生客户端；麦克风与录屏需要浏览器和系统授权。安卓支持 Android 10+。
+
+## 本地启动
+
+需要 Go 1.23+。在项目根目录执行：
+
+```sh
+cd server
+LISTEN_ADDR=0.0.0.0:8080 go run .
+```
+
+电脑端本地开发：Go 服务使用 `LISTEN_ADDR=127.0.0.1:18765` 启动，再在项目根目录运行 `python3 scripts/serve-web.py`，打开 `http://127.0.0.1:18861/`。远程访问网页需要 HTTPS，局域网 HTTP IP 不满足浏览器媒体权限的安全上下文要求。
+
+两台手机和电脑连接同一可信 Wi-Fi。在安卓测试版的“连接设置”输入 `http://电脑的局域网IP:8080`。不能填写手机自己的 `localhost`。检查电脑防火墙允许访问 TCP 8080；访客 Wi-Fi 设备隔离可能阻断直连。
+
+1. 安卓安装 APK，电脑打开网页。
+2. 确保网页 API 和安卓连接地址指向同一套信令服务。
+3. 第一端点“创建房间”，允许麦克风权限，把 8 位房间号告诉另一端。
+4. 另一端输入房间号，点“加入通话”。
+5. 语音连接后，任一方点“开始共享屏幕”，选择共享来源并接受系统授权。
+6. 停止共享后，另一方可开始共享。挂断、划掉应用任务或系统终止进程会结束当前会话。
+
+系统声音在录屏授权后随共享自动开始，停止共享时一并停止；“静音”只关闭麦克风。对方通话声音不会被重新采集。源应用必须允许音频采集，受保护内容、通话、通知等非媒体声音不保证能共享。
+
+电脑共享声音：Chrome / Edge 优先选择“标签页”，勾选“同时分享音频”。macOS、Linux 的整个屏幕/窗口音频及 Safari/Firefox 支持受系统和浏览器限制，不能保证采集；页面会提示当前是否拿到了音频轨。Windows 整屏声音也以浏览器实际选项为准。没有麦克风的电脑目前不能建立通话。
+
+麦克风用于双向语音；附近设备权限用于蓝牙音频选择。Android 13+ 的通知权限可拒绝，但拒绝后通知栏操作入口可能不可见，需返回应用停止共享。Android 10/11 的蓝牙音频选择依赖系统路由，应用内只提供扬声器和听筒/耳机切换。
+
+## 分辨率、帧率和码率
+
+通话中，电脑展开“精确调整画质”，安卓点击“画质设置”。修改的是自己发送的画面；点击应用即可生效，不需要重新建房。当前设置仅在本次通话内有效。
+
+- 分辨率：720p、1080p、1440p、4K 快选，也可输入长边 320–3840、短边 180–2160 的偶数像素，长边不得小于短边。按共享源比例和方向适配，不强行放大低分辨率源。
+- 帧率：1–60 FPS 的任意整数，常用 15 / 24 / 30 / 60；可独立组合，例如 4K、25 FPS、17.5 Mbps。
+- 码率：0.5–80 Mbps 上限，网页以 0.1 Mbps 步进。码率是上限，静止画面不必用满。
+- 策略：自动平衡、清晰优先（允许降帧）、帧率优先（允许降分辨率）。WebRTC 拥塞控制始终生效。
+- 预设：均衡 1080p/30/8 Mbps，文字清晰 1440p/24/12 Mbps，动态流畅 1080p/60/10 Mbps，4K 超清 2160p/30/24 Mbps。
+
+通话页区分目标参数与实际发送/接收尺寸、FPS、Mbps，并显示已知的编码性能或带宽限制。目标不等于保证值：4K 需要足够清晰的采集源与编码/解码能力，60 FPS 需要持续变化的画面和足够性能；两者不保证同时达到。静止画面主动降帧属于正常行为。无效输入不会应用；设备拒绝新组合时尝试恢复原参数，恢复失败则停止画面并保留语音。
+
+## 构建安卓 APK
+
+需要 Java 17、Android SDK Platform 35 与 Build Tools 35.0.0。Gradle Wrapper 已固定版本。
+
+```sh
+# 配置 ANDROID_HOME，或在不提交的 local.properties 中填写 sdk.dir=/你的/sdk/路径
+./gradlew :app:assembleDebug :app:testDebugUnitTest :app:lintDebug
+```
+
+安装包：`app/build/outputs/apk/debug/app-debug.apk`。
+
+Debug 允许局域网 HTTP，不能用于不可信网络传输房间凭证。Release 默认只允许 HTTPS，发布前需要自行配置持久签名和真实服务器证书。Debug 签名仅用于测试，不是应用商店发布签名。
+
+```sh
+adb -s <设备序列号> install -r app/build/outputs/apk/debug/app-debug.apk
+```
+
+## 跨网络使用
+
+同 Wi-Fi 可以不配置 ICE 服务；跨运营商、4G/5G 等网络需要实际可用的 STUN/TURN。使用 `deploy/server.env.example` 与 `deploy/turnserver.conf.example` 作为配置参考。
+
+- `STUN_URLS`：逗号分隔，例如 `stun:你的域名:3478`。
+- `TURN_URLS`：例如 `turn:你的域名:3478?transport=udp,turn:你的域名:3478?transport=tcp`。
+- `TURN_SECRET`：与 coturn 的 `static-auth-secret` 完全相同，通过环境变量或受限权限配置文件传入，不写入 APK。
+- coturn 开放配置使用的 UDP/TCP 3478 和 UDP relay 端口段，位于 NAT 后时配置真实映射地址。
+- 公网信令使用 HTTPS。可设置 `TLS_CERT_FILE`、`TLS_KEY_FILE` 让服务直接提供 TLS，或使用已有反向代理；代理读超时应大于 30 秒。
+- 如果使用反向代理，本服务按 TCP 对端限流，不信任客户端 `X-Forwarded-For`；共享代理地址会共享创建/加入限额。公开运营前应结合可信代理配置和实际用户量设计限流。
+
+服务在用户加入时生成有效期 3 小时的 TURN 临时凭证，房间最长 2 小时。麦克风和屏幕媒体使用 WebRTC 加密传输；初始信令的真实性依赖 HTTPS 和用户确认的服务地址。
+
+可构建 Linux 服务端：
+
+```sh
+cd server
+CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -o ../dist/signaling-linux-amd64 .
+```
+
+`deploy/screenshare.service` 为可选 systemd 示例；先创建专用系统用户，准备配置和证书访问权限，再启用服务。配置模板需要按自己的域名、端口和部署环境调整。电脑静态站和同源 API 使用 `deploy/nginx-web.locations.conf`，原站点根路径继续保留。
+
+## 验证
+
+公开仓库包含测试代码和验证结论。包含个人浏览器标签或具体网络信息的截图、原始运行记录仅保存在本地；验证文档中的这些证据路径不随公开源码发布。
+
+```sh
+cd server
+go test -race ./...
+go vet ./...
+```
+
+测试覆盖：两人限制、会话鉴权、协商角色、消息重放与发送去重、共享互斥、断开、房间过期、事件窗口、基本限流与 TURN 凭证生成。
+
+桌面协商与生命周期回归：`node --test web/tests/call.test.mjs`。开发端到端页面 `/tests/browser.html` 使用可测的 Canvas/正弦波输入与真实 RTCPeerConnection；不部署测试页面。详细记录见 [0.3.0 验证](docs/0.3.0验证记录.md)。
+
+安卓单元测试覆盖服务器地址、HTTPS 限制、播放音频混合以及画质参数和等比尺寸计算。端到端清单见 `docs/测试与验收.md`。不能用界面显示的“网络往返 RTT”替代屏幕端到端延迟。
+
+## 目录与实现
+
+- `app/`：安卓客户端；`CallService` 保持通话前台服务；`CallSession` 协调房间、音频和生命周期；`RtcSession` 管理 WebRTC 和屏幕采集。
+- `web/`：电脑浏览器客户端，无 npm 运行依赖；测试页面不发布。
+- `server/`：无第三方运行时依赖的信令服务，房间只保存在内存中，重启即结束。
+- `deploy/`：服务器与 TURN 配置示例。
+- `docs/`：开源调研、测试记录。
+
+原型边界：只支持两人、单路屏幕。断网尝试恢复，长时间离线或状态过期需重新建房。受保护窗口可能黑屏。帧率、分辨率上限不保证在所有机型和网络上达到。自动画质由 WebRTC 拥塞控制和视频降级策略调节；尚未实现独立温控策略。
+
+## 依赖与开源参考
+
+直接使用 `io.github.webrtc-sdk:android:144.7559.15` 的 WebRTC 预编译库及 AndroidX/Kotlin。参考 ScreenStream、LiveKit 和 scrcpy 的公开架构设计，本实现没有复制 RustDesk 的 AGPL 源码。见 `THIRD_PARTY_NOTICES.md`。首次构建需能访问 Google Maven、Maven Central 和 Gradle 分发源。
+
+## 安卓模拟器
+
+通过 Android Studio 的设备管理器安装官方模拟器与 Android 系统镜像，创建两台独立 AVD。模拟器可使用 `http://10.0.2.2:8080` 访问宿主电脑上按“本地启动”运行的服务；请在应用中自行配置地址。
+
+`scripts/start-emulator.sh` 是开发环境辅助脚本，要求 SDK 位于 `.tools/android-sdk`、AVD 位于 `.tools/avds`，并已经创建 `codex-screenshare-host` 与 `codex-screenshare-viewer`。这些工具和设备数据不随仓库分发。模拟器测试不能替代真机性能、回声消除、蓝牙路由或移动网络验收。

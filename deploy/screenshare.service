@@ -1,0 +1,20 @@
+[Unit]
+Description=ScreenShare signaling
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=screenshare
+WorkingDirectory=/opt/screenshare
+EnvironmentFile=/opt/screenshare/server.env
+ExecStart=/opt/screenshare/signaling
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

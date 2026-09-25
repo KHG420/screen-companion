@@ -1,0 +1,126 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-09-25T07:48:59.941663+00:00",
+  "title": "Design System: 同屏",
+  "extensions": {
+    "motion": [
+      {
+        "name": "web-button-background",
+        "value": "background .16s ease-out",
+        "purpose": "网页按钮背景状态过渡；减少动态效果时关闭。"
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "web-compact",
+        "value": "900px"
+      },
+      {
+        "name": "web-single-column",
+        "value": "640px"
+      }
+    ],
+    "typographyMeta": {
+      "web-display": {
+        "displayName": "首页标题",
+        "purpose": "自托管 ZCOOL KuaiLe 固定首页标题子集；OFL 授权。"
+      },
+      "web-body": {
+        "displayName": "系统正文与控件",
+        "purpose": "网页系统 sans 字体栈。"
+      }
+    },
+    "implementationNotes": [
+      "主色与中性色取自当前源码，不生成未实现的色阶。",
+      "Android 原生 Material 3 组件、dp 尺寸及系统栏策略见 DESIGN.md；以下 HTML/CSS 只记录网页。",
+      "最后一次 Android 系统栏修正已在通话与共享状态重新截图验收，奶油背板与深色导航按钮对比清晰。"
+    ]
+  },
+  "components": [
+    {
+      "name": "首页主按钮",
+      "kind": "button",
+      "description": "网页实际按钮样式；Android 使用 Material 3 原生对应控件。",
+      "html": "<button class=\"ds-home-primary\">创建房间</button>",
+      "css": ".ds-home-primary{font-family:-apple-system,BlinkMacSystemFont,\"Segoe UI\",\"PingFang SC\",\"Microsoft YaHei\",sans-serif;font-size:16px;line-height:1.6;min-height:46px;padding:10px 19px;border:1px solid #a65c2b;border-radius:8px;background:#a65c2b;color:#fff;font-weight:600;cursor:pointer;transition:background .16s ease-out}.ds-home-primary:hover{background:#86491f}.ds-home-primary:focus-visible{outline:3px solid #a65c2b;outline-offset:4px}.ds-home-primary:disabled{cursor:not-allowed;opacity:.5}@media(prefers-reduced-motion:reduce){.ds-home-primary{transition:none}}",
+      "refersTo": "web-button-home"
+    },
+    {
+      "name": "通话主按钮",
+      "kind": "button",
+      "description": "网页实际按钮样式；Android 使用 Material 3 原生对应控件。",
+      "html": "<button class=\"ds-call-primary\">共享我的屏幕</button>",
+      "css": ".ds-call-primary{font-family:-apple-system,BlinkMacSystemFont,\"Segoe UI\",\"PingFang SC\",\"Microsoft YaHei\",sans-serif;font-size:16px;line-height:1.6;min-height:46px;padding:10px 19px;border:1px solid #f2d28d;border-radius:8px;background:#f2d28d;color:#30291c;font-weight:600;cursor:pointer;transition:background .16s ease-out}.ds-call-primary:hover{background:#ffe3a9}.ds-call-primary:focus-visible{outline:3px solid #f2d28d;outline-offset:4px}.ds-call-primary:disabled{cursor:not-allowed;opacity:.5}@media(prefers-reduced-motion:reduce){.ds-call-primary{transition:none}}",
+      "refersTo": "web-button-call"
+    },
+    {
+      "name": "通话普通按钮",
+      "kind": "button",
+      "description": "网页实际按钮样式；Android 使用 Material 3 原生对应控件。",
+      "html": "<button class=\"ds-call-secondary\">关闭麦克风</button>",
+      "css": ".ds-call-secondary{font-family:-apple-system,BlinkMacSystemFont,\"Segoe UI\",\"PingFang SC\",\"Microsoft YaHei\",sans-serif;font-size:16px;line-height:1.6;min-height:46px;padding:10px 19px;border:1px solid #394355;border-radius:8px;background:#293345;color:#f7f0df;font-weight:600;cursor:pointer;transition:background .16s ease-out}.ds-call-secondary:hover{background:#394355}.ds-call-secondary:focus-visible{outline:3px solid #f2d28d;outline-offset:4px}.ds-call-secondary:disabled{cursor:not-allowed;opacity:.5}@media(prefers-reduced-motion:reduce){.ds-call-secondary{transition:none}}"
+    },
+    {
+      "name": "结束通话按钮",
+      "kind": "button",
+      "description": "网页实际按钮样式；Android 使用 Material 3 原生对应控件。",
+      "html": "<button class=\"ds-call-danger\">结束通话</button>",
+      "css": ".ds-call-danger{font-family:-apple-system,BlinkMacSystemFont,\"Segoe UI\",\"PingFang SC\",\"Microsoft YaHei\",sans-serif;font-size:16px;line-height:1.6;min-height:46px;padding:10px 19px;border:1px solid #69424b;border-radius:8px;background:#492c32;color:#ffb4ab;font-weight:600;cursor:pointer;transition:background .16s ease-out}.ds-call-danger:hover{background:#492c32}.ds-call-danger:focus-visible{outline:3px solid #f2d28d;outline-offset:4px}.ds-call-danger:disabled{cursor:not-allowed;opacity:.5}@media(prefers-reduced-motion:reduce){.ds-call-danger{transition:none}}"
+    },
+    {
+      "name": "房间号输入",
+      "kind": "input",
+      "description": "网页等宽数字输入，有显式标签；不把浏览器验证示例当作真实加入流程。",
+      "html": "<label class=\"ds-room-label\" for=\"ds-room\">八位房间号</label><input class=\"ds-room\" id=\"ds-room\" inputmode=\"numeric\" maxlength=\"9\" placeholder=\"0000 0000\" />",
+      "css": ".ds-room-label{font-family:-apple-system,BlinkMacSystemFont,\"Segoe UI\",\"PingFang SC\",\"Microsoft YaHei\",sans-serif;font-size:16px;line-height:1.6;display:block;font-weight:600;font-size:14px;margin-bottom:8px;color:#49392d}.ds-room{width:100%;height:60px;border:1px solid #6d7d72;border-radius:8px;padding:12px 16px;background:#fff;color:#49392d;caret-color:#a65c2b;font-family:ui-monospace,monospace;font-size:26px;letter-spacing:.1em}.ds-room::placeholder{color:#6d7d72;opacity:1}.ds-room:focus-visible{outline:3px solid #a65c2b;outline-offset:4px}"
+    },
+    {
+      "name": "入口面板",
+      "kind": "card",
+      "refersTo": "web-entry",
+      "description": "桌面创建与加入操作所在表面，内容仅示意其实际标题与提示层级。",
+      "html": "<section class=\"ds-entry\"><h2>开始一场同屏</h2><p>每个房间最多两人。连接时需要麦克风权限。</p></section>",
+      "css": ".ds-entry{font-family:-apple-system,BlinkMacSystemFont,\"Segoe UI\",\"PingFang SC\",\"Microsoft YaHei\",sans-serif;font-size:16px;line-height:1.6;padding:36px;background:#fffdf8;border:1px solid #e6d7c6;border-radius:12px;color:#49392d}.ds-entry h2{font-size:23px;line-height:1.4;margin:0 0 26px}.ds-entry p{font-size:13px;color:#786453;margin:20px 0 0}@media(max-width:900px){.ds-entry{padding:26px}}@media(max-width:640px){.ds-entry{padding:24px}}"
+    },
+    {
+      "name": "首页品牌导航",
+      "kind": "nav",
+      "description": "网页 header 的品牌链接；图标为实际内联屏幕线条图形。",
+      "html": "<nav class=\"ds-nav\"><a class=\"ds-brand\" href=\"#\"><svg viewBox=\"0 0 32 32\" aria-hidden=\"true\"><rect x=\"3\" y=\"5\" width=\"21\" height=\"16\" rx=\"3\"/><path d=\"M11 26h15a3 3 0 0 0 3-3V12M10 21v5\"/></svg>同屏</a><span>双人屏幕共享与语音</span></nav>",
+      "css": ".ds-nav{font-family:-apple-system,BlinkMacSystemFont,\"Segoe UI\",\"PingFang SC\",\"Microsoft YaHei\",sans-serif;font-size:16px;line-height:1.6;padding:26px 40px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #e6d7c6;gap:20px;background:#fff9f0}.ds-brand{display:flex;align-items:center;gap:12px;font-size:23px;font-weight:700;color:#a65c2b;text-decoration:none}.ds-brand svg{width:34px;height:34px;fill:none;stroke:currentColor;stroke-width:2}.ds-nav span{color:#786453;font-size:14px}.ds-brand:focus-visible{outline:3px solid #a65c2b;outline-offset:4px}"
+    }
+  ],
+  "narrative": {
+    "northStar": "一起看，慢慢聊",
+    "overview": "奶油色首页、可可棕主操作与两只相互陪伴的小狗构成入口；通话转为海军蓝底、奶黄色主操作，让房间状态、共享画面及通话控制成为焦点。电脑网页与原生 Android 共用配色与角色资产，各自保持平台布局与控件语言。「同屏」是工作名。",
+    "keyCharacteristics": [
+      "奶油与可可棕承载首页，海军蓝与奶黄承载通话。",
+      "两只小狗在首页一起看电脑，等待时牵手招呼，视频画面出现后退出主舞台。",
+      "网页采用桌面双栏入口；Android 保持原生单列、滚动内容与常驻通话控制。"
+    ],
+    "rules": [
+      {
+        "name": "The Call State Rule",
+        "body": "网页进入通话后应用深色场景；Android 由 `callState.active` 驱动主题。Android 通话状态栏使用深色背景方案，非通话使用浅色方案；导航栏始终采用奶油背板与深色图标。外层 Box 的背景及 `navigationBarsPadding()` 为强制 edge-to-edge 提供实际导航栏背板。",
+        "section": "colors"
+      },
+      {
+        "name": "The Screen First Rule",
+        "body": "远端共享画面出现后不显示大插画。Android 本地共享状态也隐藏等待角色，保留状态文字与前往手机桌面的操作。Android 等待面板内边距 24dp、内容间距 12dp，内层最小高 144dp，等待角色高 140dp。",
+        "section": "components"
+      }
+    ],
+    "dos": [
+      "**Do** 同时维护奶油首页与深蓝通话场景，并保留各平台的原生布局边界。",
+      "**Do** 使用已批准的两只狗互动资产，并让视频内容优先于插画。",
+      "**Do** 保留共享状态、停止共享、静音与结束通话的明确入口。",
+      "**Do** 将源码事实、截图证据与尚未验证的平台行为分开记录。"
+    ],
+    "donts": [
+      "**Don't** 将角色稿描述为已批准的完整页面布局。",
+      "**Don't** 将 Android 主题切换描述为跟随系统深色模式。",
+      "**Don't** 将标题字体子集用于任意新文案或全部操作控件。",
+      "**Don't** 用虚构的延迟、帧率或跨平台音频能力装饰界面。"
+    ]
+  }
+}

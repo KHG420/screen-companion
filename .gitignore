@@ -1,0 +1,32 @@
+.gradle/
+.kotlin/
+.tools/
+.codegraph/
+**/build/
+local.properties
+.env
+*.jks
+!gradle/wrapper/gradle-wrapper.jar
+.DS_Store
+
+/dist/
+
+__pycache__/
+*.pyc
+
+# Local design drafts and verification evidence; may contain personal UI or network data.
+.impeccable/mocks/
+.impeccable/review/
+docs/screenshots/
+docs/*test-results.json
+docs/*fps-results.json
+docs/*deployment-checks.json
+docs/*to-browser.json
+docs/服务器部署记录.md
+
+# Runtime credentials and local signing material.
+.env.*
+!.env.example
+*.keystore
+*.p12
+*.pem
