@@ -1,15 +1,31 @@
 import { Call, friendly, qualities } from './call.js';
 const $ = id => document.getElementById(id);
-let call, starting = false, videoTrack, audioTrack;
+let call, starting = false, videoTrack, audioTrack, chatMessages;
 const initialStatus = '双人屏幕共享与语音';
 function message(text = '') { $('message').textContent = text; $('message').hidden = !text; }
 function render(s) {
   if (s.ended) {
-    call = null; videoTrack = audioTrack = null; $('play-audio').hidden = true;
+    call = null; chatMessages=null; $('chat-log').replaceChildren(); $('chat-input').value='';
+    for (const id of ['local-camera','remote-camera']) $(id).srcObject=null;
+    videoTrack = audioTrack = null; $('play-audio').hidden = true;
     $('screen').srcObject = $('remote-audio').srcObject = null;
     $('call').hidden = true; $('home').hidden = false; document.body.classList.remove('in-call');
     $('status').textContent = initialStatus; $('create').disabled = false; $('join').disabled = false;
     message(s.message); if (document.fullscreenElement) document.exitFullscreen().catch(() => {}); return;
+  }
+  $('camera').disabled = !!s.cameraBusy || (!s.cameraOn && (!s.connected || !s.chatReady));
+  $('camera').textContent = s.cameraBusy ? '正在开启…' : s.cameraOn ? '关闭摄像头' : '开启摄像头';
+  $('camera').setAttribute('aria-pressed',String(s.cameraOn));
+  for (const [id,track,enabled] of [['local-camera',s.localCamera,s.cameraOn],['remote-camera',s.remoteCamera,s.remoteCameraOn]]) {
+    const el=$(id); el.hidden=!enabled; $(id+'-empty').hidden=!!enabled;
+    if (el.srcObject?.getVideoTracks()[0] !== track) { el.srcObject=track?new MediaStream([track]):null; if(track)el.play().catch(()=>{}); }
+  }
+  $('chat-send').disabled = !s.connected || !s.chatReady;
+  $('chat-status').textContent = s.connected && s.chatReady ? '文字通道已连接' : '文字通道未连接；需要双方使用新版客户端。';
+  if (chatMessages !== s.messages) {
+    chatMessages=s.messages; const log=$('chat-log'); const atBottom=log.scrollHeight-log.scrollTop-log.clientHeight<40;
+    log.replaceChildren(...s.messages.map(m=>{const row=document.createElement('p');row.className=m.mine?'chat-message mine':'chat-message';const label=document.createElement('strong');label.textContent=m.mine?'你':'对方';const body=document.createElement('span');body.textContent=m.text;row.append(label,body);return row;}));
+    if(atBottom)log.scrollTop=log.scrollHeight;
   }
   $('home').hidden = true; $('call').hidden = false; document.body.classList.add('in-call');
   $('status').textContent = s.status; $('room-code').textContent = s.roomId?.replace(/(.{4})/, '$1 ') || '正在连接';
@@ -50,6 +66,8 @@ async function begin(room) {
 $('create').onclick = () => begin();
 $('join-form').onsubmit = e => { e.preventDefault(); begin($('room-input').value.replace(/\s/g, '')); };
 $('room-input').oninput = e => { e.target.value = e.target.value.replace(/[^0-9 ]/g, '').slice(0, 9); };
+$('camera').onclick = () => call?.toggleCamera();
+$('chat-form').onsubmit = e => { e.preventDefault(); try { if(!call)return; call.sendChat($('chat-input').value); $('chat-input').value=''; message(); } catch(error) { message(friendly(error)); } };
 $('hangup').onclick = () => call?.end('你已结束通话');
 $('mute').onclick = () => call?.mute();
 $('share').onclick = () => call?.state.sharing ? call.stopSharing() : call?.share();

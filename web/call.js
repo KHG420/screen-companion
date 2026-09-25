@@ -41,7 +41,7 @@ export function friendly(error) {
 export class Call {
   constructor(base, changed = () => {}) {
     this.base = base.replace(/\/$/, ''); this.changed = changed;
-    this.state = { status: '正在连接', connected: false, sharing: false, remoteSharing: false, muted: false, busy: false, quality: { ...qualities.auto }, qualityBusy: false };
+    this.state = { status: '正在连接', connected: false, sharing: false, remoteSharing: false, muted: false, cameraOn: false, cameraBusy: false, remoteCameraOn: false, chatReady: false, messages: [], busy: false, quality: { ...qualities.auto }, qualityBusy: false };
     this.abort = new AbortController(); this.pendingIce = []; this.sendChain = Promise.resolve(); this.closed = false;
     this.videoSamples = new Map(); this.statsTimer = null; this.connectionTimer = null; this.reconnectTimer = null;
   }
@@ -78,9 +78,17 @@ export class Call {
       if (this.closed) return;
       this.pc = new RTCPeerConnection({ iceServers: this.credentials.iceServers, iceTransportPolicy: 'all' });
       this.pc.addTrack(this.mix.stream.getAudioTracks()[0], this.mix.stream);
-      if (this.credentials.role === 'host') this.video = this.pc.addTransceiver('video', { direction: 'sendrecv' });
+      if (this.credentials.role === 'host') {
+        this.video = this.pc.addTransceiver('video', { direction: 'sendrecv' });
+        this.cameraVideo = this.pc.addTransceiver('video', { direction: 'sendrecv' });
+        this.bindChannel(this.pc.createDataChannel('companion-v1', { ordered:true }));
+      }
+      this.pc.ondatachannel = ({channel}) => this.bindChannel(channel);
       this.pc.onicecandidate = ({ candidate }) => { if (candidate) this.signal('ice', candidate.toJSON()); };
-      this.pc.ontrack = ({ track }) => this.update(track.kind === 'video' ? { remoteVideo: track } : { remoteAudio: track });
+      this.pc.ontrack = ({ track, transceiver }) => {
+        const videos = this.pc.getTransceivers().filter(t => t.receiver.track.kind === 'video');
+        this.update(track.kind !== 'video' ? {remoteAudio:track} : videos.indexOf(transceiver) === 1 ? {remoteCamera:track} : {remoteVideo:track});
+      };
       this.pc.onconnectionstatechange = () => this.connectionChanged();
       this.update({ roomId: this.credentials.roomId, role: this.credentials.role, hasTurn: this.credentials.hasTurn,
         status: this.credentials.role === 'host' ? '等待对方加入' : '正在连接语音' });
@@ -121,7 +129,10 @@ export class Call {
         // Reuse the offered video slot, as the Android answerer does.
         this.video = this.pc.getTransceivers().find(t => t.receiver.track.kind === 'video');
         if (!this.video) throw new Error('对方未提供屏幕通道，请更新客户端。');
-        this.video.direction = 'sendrecv'; await this.flushIce();
+        this.video.direction = 'sendrecv';
+        this.cameraVideo = this.pc.getTransceivers().filter(t => t.receiver.track.kind === 'video')[1];
+        if (this.cameraVideo) this.cameraVideo.direction = 'sendrecv';
+        await this.flushIce();
         await this.pc.setLocalDescription(await this.pc.createAnswer());
         await this.signal('answer', { sdp: this.pc.localDescription.sdp }); break;
       case 'answer': await this.pc.setRemoteDescription({ type: 'answer', sdp: data.sdp }); await this.flushIce(); break;
@@ -168,6 +179,70 @@ export class Call {
           (this.credentials.role === 'host' ? this.offer(true) : this.signal('restart', {})).catch(e => this.fail(friendly(e)));
         }, 2000);
       }
+    }
+  }
+  bindChannel(channel) {
+    if (channel.label !== 'companion-v1' || this.channel) { channel.close(); return; }
+    this.channel = channel;
+    channel.onopen = () => { this.update({chatReady:true}); this.sendCameraState(); };
+    channel.onclose = channel.onerror = () => this.update({chatReady:false, remoteCameraOn:false});
+    channel.onmessage = ({data}) => {
+      if (this.closed || typeof data !== 'string' || new TextEncoder().encode(data).length > 16384) return;
+      try {
+        const m = JSON.parse(data);
+        if (m.type === 'camera' && typeof m.enabled === 'boolean') this.update({remoteCameraOn:m.enabled});
+        else if (m.type === 'chat' && typeof m.text === 'string' && m.text.trim() && m.text.length <= 2000)
+          this.update({messages:[...this.state.messages,{text:m.text, mine:false}].slice(-200)});
+      } catch { /* Ignore malformed peer messages without interrupting media. */ }
+    };
+  }
+  sendData(message) {
+    if (this.closed || !this.state.connected || this.channel?.readyState !== 'open') throw new Error('文字通道尚未连接，请稍后重试。');
+    if (this.channel.bufferedAmount > 65536) throw new Error('消息正在发送，请稍后重试。');
+    this.channel.send(JSON.stringify(message));
+  }
+  sendChat(text) {
+    text = text.trim();
+    if (!text || text.length > 2000) throw new Error('消息需为 1–2000 个字符。');
+    this.sendData({type:'chat',text});
+    this.update({messages:[...this.state.messages,{text,mine:true}].slice(-200)});
+  }
+  sendCameraState() {
+    if (this.channel?.readyState === 'open') {
+      try { this.channel.send(JSON.stringify({type:'camera',enabled:this.state.cameraOn})); } catch {}
+    }
+  }
+  async toggleCamera() {
+    if (this.closed || this.state.cameraBusy) return;
+    if (this.state.cameraOn) { await this.stopCamera(); return; }
+    if (!this.state.connected || !this.cameraVideo || !this.state.chatReady) {
+      this.update({error:'摄像头通道尚未就绪，请确认双方使用新版客户端。'}); return;
+    }
+    this.update({cameraBusy:true,error:''});
+    let stream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({video:{width:{ideal:1280,max:1280},height:{ideal:720,max:720},frameRate:{ideal:30,max:30}},audio:false});
+      if (this.closed) { stream.getTracks().forEach(t=>t.stop()); return; }
+      this.camera = stream;
+      const track = stream.getVideoTracks()[0];
+      await this.cameraVideo.sender.replaceTrack(track);
+      const p = this.cameraVideo.sender.getParameters();
+      for (const e of p.encodings || []) { e.maxBitrate=2000000; e.maxFramerate=30; }
+      if (p.encodings?.length) await this.cameraVideo.sender.setParameters(p);
+      track.onended = () => this.stopCamera();
+      this.update({cameraOn:true,localCamera:track});
+      this.sendCameraState();
+    } catch (error) {
+      stream?.getTracks().forEach(t=>t.stop());
+      await this.stopCamera();
+      this.update({error:'无法开启摄像头，请检查摄像头权限及设备占用。'+friendly(error)});
+    } finally { this.update({cameraBusy:false}); }
+  }
+  async stopCamera() {
+    this.camera?.getTracks().forEach(t=>{t.onended=null;t.stop();}); this.camera=null;
+    if (!this.closed) {
+      await this.cameraVideo?.sender.replaceTrack(null).catch(()=>{});
+      this.update({cameraOn:false,localCamera:null}); this.sendCameraState();
     }
   }
   mute() { this.update({ muted: !this.state.muted }); this.micGain.gain.value = this.state.muted ? 0 : 1; }
@@ -258,7 +333,7 @@ export class Call {
       const lines = [];
       for (const direction of ['outbound-rtp','inbound-rtp']) {
         const active = direction === 'outbound-rtp' ? this.state.sharing : this.state.remoteSharing;
-        const rows = [...report.values()].filter(r=>r.type===direction && r.kind==='video' && !r.isRemote);
+        const rows = [...report.values()].filter(r=>r.type===direction && r.kind==='video' && !r.isRemote && r.mid === this.video?.mid);
         for (const r of rows) {
           const rate=videoRate(r,this.videoSamples.get(r.id));this.videoSamples.set(r.id,rate);
           if (!active || !r.frameWidth) continue;
@@ -277,9 +352,9 @@ export class Call {
     if (this.closed) return;
     this.closed = true; this.abort.abort();
     clearInterval(this.statsTimer); clearTimeout(this.connectionTimer); clearTimeout(this.reconnectTimer);
-    this.stopCapture(); this.mic?.getTracks().forEach(t => { t.onended = null; t.stop(); });
+    this.stopCamera(); this.channel?.close(); this.stopCapture(); this.mic?.getTracks().forEach(t => { t.onended = null; t.stop(); });
     this.mix?.stream.getTracks().forEach(t => t.stop()); this.pc?.close(); this.audio?.close().catch(() => {});
     if (notify && this.credentials) this.request('DELETE', this.path(), undefined, 1500, true).catch(() => {});
-    this.changed({ ...this.state, ended: true, connected: false, sharing: false, message, error: error ? message : '' });
+    this.changed({ ...this.state, ended: true, connected: false, sharing: false, cameraOn:false, localCamera:null, remoteCamera:null, messages:[], chatReady:false, message, error: error ? message : '' });
   }
 }

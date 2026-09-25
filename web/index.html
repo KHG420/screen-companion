@@ -12,7 +12,13 @@
 <section id="call" hidden>
 <div class="room-bar"><div><span class="hint">房间号</span><strong id="room-code"></strong><button id="copy" class="quiet">复制房间号</button></div><span id="network">等待连接</span></div>
 <div id="stage" class="stage"><video id="screen" autoplay playsinline muted hidden></video><div id="empty"><img class="waiting-puppies" src="assets/puppies-wait.png" alt="小白牵着小金毛，招呼对方一起同屏"><h2 id="stage-title">等待对方加入</h2><p id="stage-description">把上方房间号告诉对方，即可开始语音。</p></div><div id="screen-label" hidden></div><button id="fullscreen" class="overlay" hidden>全屏查看</button></div>
-<audio id="remote-audio" autoplay></audio><button id="play-audio" hidden>点击播放对方声音</button>
+<section class="conversation" aria-label="视频与聊天">
+<div class="camera-panel"><div class="camera-heading"><h2>视频通话</h2><button id="camera" aria-pressed="false" disabled>开启摄像头</button></div>
+<div class="camera-grid"><figure><video id="remote-camera" autoplay playsinline muted hidden></video><p id="remote-camera-empty">对方尚未开启摄像头</p><figcaption>对方</figcaption></figure><figure><video id="local-camera" autoplay playsinline muted hidden></video><p id="local-camera-empty">你的摄像头已关闭</p><figcaption>你 · 本地预览</figcaption></figure></div></div>
+<div class="chat-panel"><h2>房间聊天</h2><p class="hint">仅保留本次通话最近 200 条消息。</p><div id="chat-log" role="log" aria-label="聊天消息" aria-live="polite"><p class="hint">连接后，发一句问候吧。</p></div>
+<form id="chat-form"><label for="chat-input">消息</label><div class="chat-compose"><textarea id="chat-input" rows="2" maxlength="2000" placeholder="输入消息，最多 2000 字符"></textarea><button id="chat-send" type="submit" disabled>发送</button></div><p id="chat-status" role="status" class="hint">正在连接文字通道…</p></form></div>
+</section>
+<audio id="remote-audio"  autoplay></audio><button id="play-audio" hidden>点击播放对方声音</button>
 <div class="controls"><div class="control-group"><button id="share" class="primary" disabled>共享我的屏幕</button><button id="mute" aria-pressed="false">关闭麦克风</button></div><div class="control-group"><label for="quality">画质</label><select id="quality"><option value="auto">均衡 · 1080p / 30 帧</option><option value="clear">文字 · 1440p / 24 帧</option><option value="smooth">动态 · 1080p / 60 帧</option><option value="uhd">4K · 2160p / 30 帧</option><option value="custom" disabled>自定义</option></select><button id="hangup" class="danger">结束通话</button></div></div>
 <details id="quality-details"><summary>精确调整画质</summary>
 <form id="quality-form">

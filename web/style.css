@@ -6,3 +6,23 @@
 h1{font-family:"Tongping Title","PingFang SC",sans-serif;font-weight:400}
 
 #quality-details{margin-top:20px;border-top:1px solid var(--line);padding-top:16px}summary{cursor:pointer;font-weight:600;min-height:44px;display:list-item}summary:focus-visible{outline:3px solid #f2d28d;outline-offset:4px}.quality-fields{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin:16px 0}.quality-fields input{font:inherit;letter-spacing:normal;height:48px;background:#293345;color:#f7f0df;border-color:#8d9aaf}.quality-fields select{width:100%;min-width:0}#quality-result{color:#f2d28d}#media-stats{font-variant-numeric:tabular-nums;white-space:pre-line;color:#f7f0df}#quality-target,#quality-note{overflow-wrap:anywhere}@media(max-width:900px){.quality-fields{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:640px){.quality-fields{grid-template-columns:1fr}}
+
+/* Camera and conversation keep the shared screen as the main stage. */
+.conversation{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:24px}
+.conversation h2{font-size:18px;margin:0}
+.camera-heading{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:12px}
+.camera-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.camera-grid figure{margin:0;min-width:0;background:#10151f;border-radius:12px;overflow:hidden}
+.camera-grid video{width:100%;height:160px;object-fit:contain;display:block}
+.camera-grid p{height:160px;display:flex;align-items:center;justify-content:center;margin:0;padding:12px;color:#b6c0cf;font-size:13px;text-align:center;box-sizing:border-box}
+.camera-grid figcaption{padding:8px 12px;font-size:13px;color:#b6c0cf}
+#local-camera{transform:scaleX(-1)}
+.chat-panel{min-width:0}
+#chat-log{height:170px;overflow:auto;border-block:1px solid #394355;margin:12px 0;overflow-wrap:anywhere}
+.chat-message{margin:10px 0;white-space:pre-wrap;font-size:14px}
+.chat-message strong{display:block;font-size:12px;color:#b6c0cf}
+.chat-message.mine strong{color:#f2d28d}
+.chat-compose{display:flex;gap:12px;align-items:stretch}
+#chat-input{flex:1;min-width:0;background:#10151f;color:#f7f0df;border:1px solid #8d9aaf;border-radius:8px;padding:10px;font:inherit;resize:vertical}
+#chat-input:focus-visible{outline:3px solid #f2d28d;outline-offset:3px}
+@media(max-width:900px){.conversation{grid-template-columns:1fr}}

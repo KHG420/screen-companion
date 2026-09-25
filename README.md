@@ -2,9 +2,9 @@
 
 **English** | [简体中文](README.zh-CN.md)
 
-Two-person screen sharing and voice chat for Android and desktop browsers. Create a room, share its eight-digit code, talk, and take turns sharing a screen. The Android client uses Kotlin and Jetpack Compose; the desktop client uses native JavaScript and WebRTC. Both use the same Go signaling service built with the standard library.
+Two-person screen sharing, camera video calls, and text/voice chat for Android and desktop browsers. Create a room, share its eight-digit code, talk, and take turns sharing a screen. The Android client uses Kotlin and Jetpack Compose; the desktop client uses native JavaScript and WebRTC. Both use the same Go signaling service built with the standard library.
 
-Version **0.3.0** is a development and testing release. It does not include accounts, remote control, or recording storage. Screen video, microphone audio, and supported shared media audio travel over WebRTC. HTTP long polling exchanges only SDP, ICE candidates, and sharing state; the signaling server does not forward media. Devices connect directly when possible, with TURN as a fallback. High resolution and low latency are not guaranteed across physical devices and networks.
+Version **0.4.0** is a development and testing release. It does not include accounts, remote control, or recording storage. Screen video, microphone audio, and supported shared media audio travel over WebRTC. HTTP long polling exchanges only SDP, ICE candidates, and sharing state; the signaling server does not forward media. Devices connect directly when possible, with TURN as a fallback. High resolution and low latency are not guaranteed across physical devices and networks.
 
 ## Self-hosting and supported platforms
 
@@ -13,6 +13,16 @@ This repository does not provide a public test service or a preconfigured server
 - **Desktop:** recent Chrome or Edge on Windows, macOS, or Linux. No native desktop installation is required. Microphone and screen capture require browser and operating-system permission.
 - **Android:** Android 10 or later.
 - **Room model:** two participants, bidirectional voice, and one shared screen at a time. iOS and multiparty calls are outside the current scope.
+
+## Camera video and text chat
+
+After joining a call, choose **开启摄像头** (Enable camera) or use the chat panel. Camera permission is requested only when enabling video. Either participant can turn their camera off independently; Android also supports switching front/back cameras. Both cameras and one shared screen can run together.
+
+Camera video targets up to 720p / 30 FPS / 2 Mbps, subject to device and network capacity. The existing 4K and precise quality controls apply to **screen sharing**, independently of the camera. On Android, an enabled camera can remain active when switching apps, with a foreground notification; turn it off or hang up to stop capture.
+
+Text uses an ordered, reliable WebRTC DataChannel, with direct connections preferred and TURN as fallback. Messages are not stored by the signaling server. Each client keeps the most recent 200 messages in memory for the current call, with at most 2,000 UTF-16 code units per message. There is no offline delivery or cross-session history; accepting a message into the sender's channel is not a read receipt. Hangup clears the displayed history.
+
+Both participants must use version 0.4.0 or later for video/chat. Update both ends together: older clients do not distinguish the new camera track from screen video.
 
 ## Run locally
 

@@ -24,7 +24,11 @@ function tone(frequency){
  const oscillator=audio.createOscillator(),gain=audio.createGain(),dest=audio.createMediaStreamDestination();
  oscillator.frequency.value=frequency;gain.gain.value=.15;oscillator.connect(gain).connect(dest);oscillator.start();sources.push(oscillator);return dest.stream;
 }
-navigator.mediaDevices.getUserMedia=async()=>tone(440);
+function cameraStream(){
+ const canvas=document.createElement('canvas');canvas.width=640;canvas.height=360;const ctx=canvas.getContext('2d');let f=0;
+ const timer=setInterval(()=>{ctx.fillStyle='#9c542e';ctx.fillRect(0,0,640,360);ctx.fillStyle='white';ctx.font='40px sans-serif';ctx.fillText('Camera '+f++,40,100);},66);timers.push(timer);return canvas.captureStream(15);
+}
+navigator.mediaDevices.getUserMedia=async options=>options.video?cameraStream():tone(440);
 navigator.mediaDevices.getDisplayMedia=async()=>{
  const canvas=document.createElement('canvas');canvas.width=3840;canvas.height=2160;const ctx=canvas.getContext('2d');ctx.scale(3,3);let frame=0;
  const draw=()=>{ctx.fillStyle='#245d52';ctx.fillRect(0,0,1280,720);ctx.fillStyle='#fff';ctx.font='60px sans-serif';ctx.fillText('同屏 WebRTC '+frame++,60,180);ctx.fillStyle='#f2d28d';ctx.fillRect(frame%1000,320,180,180);};draw();
@@ -36,7 +40,7 @@ async function start(room){init();window.testCall=new Call('/api',changed);await
 document.querySelector('#host').onclick=()=>start();document.querySelector('#join').onclick=()=>start(document.querySelector('#room').value);
 document.querySelector('#share').onclick=async()=>{await window.testCall.quality({...qualities.uhd,fps:15});await window.testCall.share();};document.querySelector('#stop').onclick=()=>window.testCall.stopSharing();document.querySelector('#mute').onclick=()=>window.testCall.mute();document.querySelector('#end').onclick=()=>window.testCall.end();
 window.sample=async c=>{
- const stats=[...(await c.pc.getStats()).values()];return stats.filter(x=>['inbound-rtp','outbound-rtp','candidate-pair'].includes(x.type)).map(x=>({type:x.type,kind:x.kind,frameWidth:x.frameWidth,frameHeight:x.frameHeight,framesDecoded:x.framesDecoded,framesEncoded:x.framesEncoded,packetsReceived:x.packetsReceived,packetsSent:x.packetsSent,bytesReceived:x.bytesReceived,state:x.state}));
+ const stats=[...(await c.pc.getStats()).values()];return stats.filter(x=>['inbound-rtp','outbound-rtp','candidate-pair'].includes(x.type)).map(x=>({type:x.type,kind:x.kind,frameWidth:x.frameWidth,frameHeight:x.frameHeight,framesDecoded:x.framesDecoded,framesEncoded:x.framesEncoded,mid:x.mid,packetsReceived:x.packetsReceived,packetsSent:x.packetsSent,bytesReceived:x.bytesReceived,state:x.state}));
 };
 const wait=ms=>new Promise(r=>setTimeout(r,ms));
 async function until(f,msg){for(let i=0;i<175;i++){if(await f())return;await wait(200);}throw new Error(msg);}
@@ -46,9 +50,20 @@ document.querySelector('#pair').onclick=async()=>{
  const record=(name,ok,detail)=>{window.results.push({name,ok,detail});out.textContent=JSON.stringify(window.results,null,2);if(!ok)throw new Error(name);};
  try{
  h=new Call('/api',s=>document.body.dataset.host=JSON.stringify({...s,remoteAudio:!!s.remoteAudio,remoteVideo:!!s.remoteVideo}));await h.start();g=new Call('/api',s=>document.body.dataset.guest=JSON.stringify({...s,remoteAudio:!!s.remoteAudio,remoteVideo:!!s.remoteVideo}));await g.start(h.state.roomId);await until(()=>h.state.connected&&g.state.connected,'connect');record('two browsers connected',true);
+ await until(()=>h.state.chatReady&&g.state.chatReady,'data channel');
+ h.sendChat('你好，小狗 🐶');g.sendChat('<img src=x onerror=alert(1)>');
+ await until(()=>h.state.messages.length===2&&g.state.messages.length===2,'chat messages');record('bidirectional Unicode text via data channel',g.state.messages.some(m=>m.text==='你好，小狗 🐶'&&!m.mine));
+ await h.toggleCamera();await g.toggleCamera();
+ await until(()=>h.state.remoteCameraOn&&g.state.remoteCameraOn,'camera states');
+ await until(async()=>[h,g].every(c=>c.state.remoteCamera)&& (await window.sample(h)).some(x=>x.mid===h.cameraVideo.mid&&x.framesDecoded>0)&&(await window.sample(g)).some(x=>x.mid===g.cameraVideo.mid&&x.framesDecoded>0),'camera decode');
+ record('both camera tracks decoded',true);
  for(const c of [h,g]){const player=new Audio();player.srcObject=new MediaStream([c.state.remoteAudio]);player.volume=0;await player.play();players.push(player);}
- await h.quality({...qualities.uhd,fps:15});await h.share();await until(()=>g.state.remoteSharing&&g.state.remoteVideo,'share host');await until(async()=>(await window.sample(g)).some(x=>x.framesDecoded>0),'host decode timeout');let stats=await window.sample(g);record('host video decoded',stats.some(x=>x.framesDecoded>0),stats);
+ await h.quality({...qualities.uhd,fps:15});await h.share();await until(()=>g.state.remoteSharing&&g.state.remoteVideo,'share host');await until(async()=>(await window.sample(g)).some(x=>x.mid===g.video.mid&&x.framesDecoded>0),'host decode timeout');let stats=await window.sample(g);record('host video decoded',stats.some(x=>x.mid==='1'&&x.framesDecoded>0),stats);
  await until(async()=>(await window.sample(g)).some(x=>x.frameWidth===3840&&x.frameHeight===2160&&x.framesDecoded>0),'4K decode');record('real 3840x2160 frames decoded',true,await window.sample(g));
+ record('camera and screen remain separate',g.state.remoteCamera.id!==g.state.remoteVideo.id&&(await window.sample(g)).filter(x=>x.type==='inbound-rtp'&&x.kind==='video'&&x.framesDecoded>0).length===2);
+ const cameraTrack=h.state.localCamera;await h.stopCamera();await until(()=>!g.state.remoteCameraOn,'camera off');
+ record('camera stops without stopping screen',cameraTrack.readyState==='ended'&&h.state.sharing);
+ await h.toggleCamera();await until(()=>g.state.remoteCameraOn,'camera reopen');record('camera can reopen',h.state.cameraOn);
  await h.quality({...qualities.auto,width:1280,height:720,fps:20,bitrate:2_500_000});
  await until(async()=>(await window.sample(g)).some(x=>x.frameWidth===1280&&x.frameHeight===720),'live 720p decode');
  record('live independent 720p 20fps 2.5Mbps',h.video.sender.getParameters().encodings[0].maxFramerate===20&&h.state.quality.bitrate===2_500_000,await window.sample(g));
@@ -57,12 +72,12 @@ document.querySelector('#pair').onclick=async()=>{
  h.mute();await wait(600);const mixed=await rms(g.state.remoteAudio);record('screen sound continues with mic muted',mixed>.01,mixed);
  await h.stopSharing();await wait(2500);const silence=await rms(g.state.remoteAudio);record('stop share removes screen audio while mic muted',silence<.005,silence);
  h.mute();await wait(500);const mic=await rms(g.state.remoteAudio);record('mic can resume after sharing',mic>.01,mic);
- await until(()=>!g.state.remoteSharing,'release lock');await g.share();await until(async()=>(await window.sample(h)).some(x=>x.framesDecoded>0),'guest decode timeout');stats=await window.sample(h);record('guest video decoded using offered transceiver',stats.some(x=>x.framesDecoded>0),stats);
+ await until(()=>!g.state.remoteSharing,'release lock');await g.share();await until(async()=>(await window.sample(h)).some(x=>x.mid===h.video.mid&&x.framesDecoded>0),'guest decode timeout');stats=await window.sample(h);record('guest video decoded using offered transceiver',stats.some(x=>x.mid==='1'&&x.framesDecoded>0),stats);
  await g.stopSharing();await until(()=>!h.state.remoteSharing,'release guest');await h.share();await wait(1000);record('restart sharing works',h.state.sharing&&g.state.remoteSharing);
  await h.offer(true);await wait(2000);record('ICE restart preserves connection',h.state.connected&&g.state.connected);
- h.end();await until(()=>g.closed,'peer end');record('hangup ends peer and media',h.closed&&g.closed&&h.mic.getTracks().every(t=>t.readyState==='ended'));
- window.done=true;
- }catch(e){window.testError=e.message;window.done=true;out.textContent=JSON.stringify({error:e.message,results:window.results,host:h?.state,guest:g?.state,hs:h?.pc?.connectionState,gs:g?.pc?.connectionState,hostStats:h?.closed?null:await window.sample(h),guestStats:g?.closed?null:await window.sample(g)},null,2);}finally{h?.end();g?.end();players.forEach(p=>{p.pause();p.srcObject=null});sources.forEach(s=>{try{s.stop();}catch{}});timers.forEach(clearInterval);}
+ const finalCameraTracks=[h.state.localCamera,g.state.localCamera];h.end();await until(()=>g.closed,'peer end');record('hangup ends peer and media',h.closed&&g.closed&&h.mic.getTracks().every(t=>t.readyState==='ended')&&finalCameraTracks.every(t=>t.readyState==='ended'));
+ document.body.dataset.done='true';window.done=true;
+ }catch(e){window.testError=e.message;document.body.dataset.done='true';window.done=true;out.textContent=JSON.stringify({error:e.message,results:window.results,host:h?.state,guest:g?.state,hs:h?.pc?.connectionState,gs:g?.pc?.connectionState,hostStats:h?.closed?null:await window.sample(h),guestStats:g?.closed?null:await window.sample(g)},null,2);}finally{h?.end();g?.end();players.forEach(p=>{p.pause();p.srcObject=null});sources.forEach(s=>{try{s.stop();}catch{}});timers.forEach(clearInterval);}
 };
 window.addEventListener('pagehide',()=>{window.testCall?.end();sources.forEach(s=>{try{s.stop();}catch{}});timers.forEach(clearInterval);audio?.close();});
 </script>

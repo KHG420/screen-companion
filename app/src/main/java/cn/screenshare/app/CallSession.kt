@@ -58,7 +58,15 @@ class CallSession(private val service: CallService, private val state: MutableSt
                 val credentials = api.connect(room)
                 setupAudio()
                 rtc = RtcSession(service, credentials.iceServers, credentials.role == "host", ::queueSignal,
-                    { track -> state.update { it.copy(remoteTrack = track) } }, ::connectionChanged,
+                    { track -> state.update { it.copy(remoteTrack = track) } },
+                    { track -> state.update { it.copy(remoteCamera = track) } },
+                    { message -> state.update {
+                        if (message.optString("type") == "camera") it.copy(remoteCameraOn = message.getBoolean("enabled"))
+                        else it.copy(chatMessages = (it.chatMessages + ChatMessage(message.getString("text"), false)).takeLast(200))
+                    } },
+                    { ready -> state.update { it.copy(chatReady = ready, remoteCameraOn = ready && it.remoteCameraOn) } },
+                    { error -> stopCamera(); state.update { it.copy(error = error) } },
+                    ::connectionChanged,
                     { stopSharing() },
                     { state.update { it.copy(error = "系统声音采集中断，请停止共享后重新开始。语音和画面仍可使用。") } })
                 rtc?.microphone(hasAudioFocus)
@@ -174,6 +182,36 @@ class CallSession(private val service: CallService, private val state: MutableSt
             catch (_: Exception) { end(error = "画面已停止，但共享状态同步失败，请重新加入") }
         }
     }
+    fun toggleCamera() {
+        if (ending) return
+        if (state.value.cameraOn) { stopCamera(); return }
+        if (!state.value.connected || !state.value.chatReady) return
+        try {
+            check(service.checkSelfPermission(Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) { "请允许摄像头权限" }
+            service.foreground(state.value.sharing, camera = true)
+            val track = checkNotNull(rtc).startCamera()
+            state.update { it.copy(cameraOn = true, localCamera = track, error = null) }
+        } catch (e: Exception) {
+            stopCamera()
+            state.update { it.copy(error = "无法开启摄像头：${e.message}") }
+        }
+    }
+    fun stopCamera() {
+        if (ending) return
+        runCatching { rtc?.stopCamera() }
+        state.update { it.copy(cameraOn = false, localCamera = null) }
+        service.foreground(state.value.sharing, camera = false)
+    }
+    fun switchCamera() { if (!ending && state.value.cameraOn) rtc?.switchCamera() }
+    fun sendChat(value: String): Boolean {
+        if (ending || !state.value.connected) return false
+        return try {
+            val text = value.trim()
+            checkNotNull(rtc).sendChat(text)
+            state.update { it.copy(chatMessages = (it.chatMessages + ChatMessage(text, true)).takeLast(200), error = null) }
+            true
+        } catch (e: Exception) { state.update { it.copy(error = e.message ?: "消息未发送，请重试") }; false }
+    }
     fun toggleMute() { state.update { it.copy(muted = !it.muted) }; rtc?.microphone(hasAudioFocus && !state.value.muted) }
     fun quality(value: Quality) {
         if (ending || state.value.shareBusy) return
@@ -224,7 +262,7 @@ class CallSession(private val service: CallService, private val state: MutableSt
         // Stop local capture/microphone immediately, even while the server is unreachable.
         runCatching { rtc?.close() }; rtc = null
         finalState = CallState(error = error, notice = notice)
-        state.update { it.copy(connected = false, sharing = false, remoteSharing = false, remoteTrack = null, shareBusy = true, status = "正在结束通话") }
+        state.update { it.copy(cameraOn = false, localCamera = null, remoteCamera = null, remoteCameraOn = false, chatReady = false, chatMessages = emptyList(), connected = false, sharing = false, remoteSharing = false, remoteTrack = null, shareBusy = true, status = "正在结束通话") }
         service.stopForeground(Service.STOP_FOREGROUND_REMOVE)
         scope.launch {
             if (notifyPeer) withTimeoutOrNull(1500) { runCatching { signaling?.leave() } }

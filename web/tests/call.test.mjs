@@ -75,3 +75,32 @@ test('video rates use interval deltas and ignore counter resets',async()=>{
   assert.equal(b.fps,25);assert.equal(b.mbps,4);
   assert.equal(videoRate({timestamp:4000,bytesSent:0,framesEncoded:0},b).fps,null);
 });
+
+test('chat validates input, bounds history and ignores malformed peer data', () => {
+  const c=new Call('/api');const sent=[];
+  const channel={label:'companion-v1',readyState:'open',bufferedAmount:0,send:v=>sent.push(JSON.parse(v))};
+  c.state.connected=true;c.bindChannel(channel);channel.onopen();
+  c.sendChat('  你好 🐶  ');
+  assert.equal(sent.at(-1).text,'你好 🐶');assert.equal(c.state.messages[0].mine,true);
+  assert.throws(()=>c.sendChat(' '));assert.throws(()=>c.sendChat('x'.repeat(2001)));
+  for(const data of ['{','{"type":"chat","text":5}',JSON.stringify({type:'chat',text:'x'.repeat(2001)}),JSON.stringify({type:'camera',enabled:'true'})])channel.onmessage({data});
+  assert.equal(c.state.messages.length,1);assert.equal(c.state.remoteCameraOn,false);
+  for(let i=0;i<220;i++)channel.onmessage({data:JSON.stringify({type:'chat',text:String(i)})});
+  assert.equal(c.state.messages.length,200);assert.equal(c.state.messages[0].text,'20');
+  channel.onmessage({data:JSON.stringify({type:'camera',enabled:true})});assert.equal(c.state.remoteCameraOn,true);
+  channel.bufferedAmount=65537;assert.throws(()=>c.sendChat('busy'));
+  c.state.connected=false;assert.throws(()=>c.sendChat('offline'));
+});
+
+test('hangup while camera permission pending stops late capture', async () => {
+  const old=Object.getOwnPropertyDescriptor(globalThis,'navigator');
+  let resolve,stopped=false,replaced=false;
+  Object.defineProperty(globalThis,'navigator',{configurable:true,value:{mediaDevices:{getUserMedia:()=>new Promise(r=>resolve=r)}}});
+  try {
+    const c=new Call('/api');c.state.connected=c.state.chatReady=true;
+    c.cameraVideo={sender:{replaceTrack:async()=>{replaced=true;}}};
+    const pending=c.toggleCamera();c.end();
+    resolve({getTracks:()=>[{stop:()=>stopped=true}]});await pending;
+    assert.equal(stopped,true);assert.equal(replaced,false);
+  }finally{if(old)Object.defineProperty(globalThis,'navigator',old);else delete globalThis.navigator;}
+});

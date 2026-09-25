@@ -112,6 +112,10 @@ private fun ScreenShareApp() {
         if (Build.VERSION.SDK_INT >= 31) needed += Manifest.permission.BLUETOOTH_CONNECT
         permissions.launch(needed.toTypedArray())
     }
+    val cameraPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { allowed ->
+        if (allowed) CallService.current?.session?.toggleCamera()
+        else permissionError = "未开启摄像头。请在系统设置中允许摄像头权限，语音和屏幕共享仍可使用。"
+    }
     val capture = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode == Activity.RESULT_OK && result.data != null && CallService.current != null) {
             context.startService(Intent(context, CallService::class.java).setAction(CallService.SHARE).putExtra("projection", result.data))
@@ -147,7 +151,11 @@ private fun ScreenShareApp() {
                     if (error != null) MessageBanner(error, true) { permissionError = null; CallService.current?.session?.dismissError() ?: run { CallService.state.value = state.copy(error = null) } }
                     state.notice?.let { MessageBanner(it, false) { CallService.state.value = state.copy(notice = null) } }
                     if (state.active) {
-                        CallScreen(state, remoteScreen, onShare = { explainShare = true }, onFullscreen = { fullscreen = true }, onCopy = {
+                        CallScreen(state, remoteScreen, onCamera = {
+                            if (state.cameraOn || context.checkSelfPermission(Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED)
+                                CallService.current?.session?.toggleCamera()
+                            else cameraPermission.launch(Manifest.permission.CAMERA)
+                        }, onShare = { explainShare = true }, onFullscreen = { fullscreen = true }, onCopy = {
                             context.getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText("房间号", state.roomId))
                             scope.launch { snack.showSnackbar("房间号已复制") }
                         })
@@ -203,11 +211,32 @@ private fun HomeScreen(room: String, onRoom: (String) -> Unit, configured: Boole
 }
 
 @Composable
-private fun CallScreen(state: CallState, remoteScreen: @Composable (VideoTrack?, Modifier) -> Unit, onShare: () -> Unit, onFullscreen: () -> Unit, onCopy: () -> Unit) {
+private fun CallScreen(state: CallState, remoteScreen: @Composable (VideoTrack?, Modifier) -> Unit, onCamera: () -> Unit, onShare: () -> Unit, onFullscreen: () -> Unit, onCopy: () -> Unit) {
     val context = LocalContext.current
     val session = CallService.current?.session
+    var chatOpen by remember { mutableStateOf(false) }
+    var draft by remember { mutableStateOf("") }
     var routeMenu by remember { mutableStateOf(false) }
     var qualityMenu by remember { mutableStateOf(false) }
+    if (chatOpen) AlertDialog(onDismissRequest = { chatOpen = false }, title = { Text("房间聊天") }, text = {
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text("仅保留本次通话最近 200 条消息。", style = MaterialTheme.typography.bodySmall)
+            val scroll = rememberScrollState()
+            LaunchedEffect(state.chatMessages.size, state.chatMessages.lastOrNull()) { scroll.animateScrollTo(scroll.maxValue) }
+            Column(Modifier.fillMaxWidth().height(220.dp).verticalScroll(scroll), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                if (state.chatMessages.isEmpty()) Text("发一句问候吧。")
+                state.chatMessages.forEach { message ->
+                    Column {
+                        Text(if (message.mine) "你" else "对方", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelMedium)
+                        Text(message.text, style = MaterialTheme.typography.bodyMedium)
+                    }
+                }
+            }
+            OutlinedTextField(draft, { if (it.length <= 2000) draft = it }, label = { Text("消息 · 最多 2000 字符") }, modifier = Modifier.fillMaxWidth(), maxLines = 3)
+            if (!state.connected || !state.chatReady) Text("文字通道未连接，需要双方使用新版客户端。", style = MaterialTheme.typography.bodySmall)
+        }
+    }, confirmButton = { TextButton(onClick = { if (session?.sendChat(draft) == true) draft = "" }, enabled = state.connected && state.chatReady && draft.isNotBlank()) { Text("发送") } },
+       dismissButton = { TextButton(onClick = { chatOpen = false }) { Text("返回通话") } })
     if (qualityMenu) QualityDialog(state.quality, onDismiss = { qualityMenu = false }) {
         session?.quality(it); qualityMenu = false
     }
@@ -220,16 +249,27 @@ private fun CallScreen(state: CallState, remoteScreen: @Composable (VideoTrack?,
             }
             TextButton(onCopy, enabled = state.roomId.isNotEmpty()) { Text("复制") }
         }
+        if (state.cameraOn || state.remoteCameraOn) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            if (state.remoteCameraOn) Column(Modifier.weight(1f)) {
+                Text("对方", style = MaterialTheme.typography.labelMedium)
+                RemoteScreen(state.remoteCamera, Modifier.fillMaxWidth().height(160.dp).background(Color.Black))
+            }
+            if (state.cameraOn) Column(Modifier.weight(1f)) {
+                Text("你 · 本地预览", style = MaterialTheme.typography.labelMedium)
+                RemoteScreen(state.localCamera, Modifier.fillMaxWidth().height(160.dp).background(Color.Black))
+                TextButton(onClick = { session?.switchCamera() }) { Text("切换摄像头") }
+            }
+        }
         if (state.remoteSharing) {
             Box(Modifier.fillMaxWidth().height(360.dp).clip(RoundedCornerShape(12.dp)).background(Color.Black)) {
                 remoteScreen(state.remoteTrack, Modifier.fillMaxSize())
                 FilledTonalButton(onFullscreen, Modifier.align(Alignment.BottomEnd).padding(12.dp)) { Text("全屏观看") }
             }
             Text("双指缩放画面", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        } else {
+        } else if (state.sharing || (!state.cameraOn && !state.remoteCameraOn)) {
             Surface(color = MaterialTheme.colorScheme.primaryContainer, shape = RoundedCornerShape(16.dp)) {
                 Column(Modifier.fillMaxWidth().padding(24.dp).heightIn(min = 144.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    if (!state.sharing) Image(painterResource(R.drawable.puppies_wait), contentDescription = "小白牵着小金毛，等待一起同屏", modifier = Modifier.fillMaxWidth().height(140.dp))
+                    if (!state.sharing && !state.cameraOn && !state.remoteCameraOn) Image(painterResource(R.drawable.puppies_wait), contentDescription = "小白牵着小金毛，等待一起同屏", modifier = Modifier.fillMaxWidth().height(140.dp))
                     Text(when { state.sharing -> "正在共享你的屏幕"; state.connected -> "已经连上，可以说话了"; state.peerPresent -> "正在与对方连接"; else -> "等对方来，一起看" },
                         style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.onPrimaryContainer)
                     Text(when { state.sharing -> "切换到你想展示的应用。停止共享不会结束语音。"; state.connected -> "点击下方开始共享，把手机画面展示给对方。"; state.peerPresent -> "正在建立音频和画面通道，请稍候。"; else -> "把上方的房间号发给对方。对方加入后即可开始语音和屏幕共享。" },
@@ -244,6 +284,10 @@ private fun CallScreen(state: CallState, remoteScreen: @Composable (VideoTrack?,
         if (state.stats.isNotEmpty()) Text(state.stats, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         if (!state.hasTurn && state.roomId.isNotEmpty()) Text("当前服务未配置中转，跨网络连接可能失败。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
       }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            OutlinedButton(onCamera, Modifier.weight(1f), enabled = state.cameraOn || (state.connected && state.chatReady)) { Text(if (state.cameraOn) "关闭摄像头" else "开启摄像头") }
+            OutlinedButton(onClick = { chatOpen = true }, modifier = Modifier.weight(1f)) { Text("聊天 (${state.chatMessages.count { !it.mine }})") }
+        }
         Button(onClick = { if (state.sharing) session?.stopSharing() else onShare() },
             enabled = state.sharing || (state.connected && !state.remoteSharing && !state.shareBusy), modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)) {
             Text(when { state.shareBusy -> "正在更新共享…"; state.sharing -> "停止共享"; state.remoteSharing -> "对方正在共享"; else -> "开始共享屏幕" })

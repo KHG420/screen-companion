@@ -30,6 +30,10 @@ class RtcSession(
     private val isHost: Boolean,
     private val signal: (String, JSONObject) -> Unit,
     private val remoteVideo: (VideoTrack) -> Unit,
+    private val remoteCamera: (VideoTrack) -> Unit,
+    private val peerMessage: (JSONObject) -> Unit,
+    private val chatReady: (Boolean) -> Unit,
+    private val cameraFailed: (String) -> Unit,
     private val connectionChanged: (PeerConnection.PeerConnectionState) -> Unit,
     private val projectionStopped: () -> Unit,
     private val playbackFailed: () -> Unit,
@@ -43,6 +47,13 @@ class RtcSession(
     private val audioTrack: AudioTrack
     private val peer: PeerConnection
     private var videoSender: RtpSender? = null
+    private var cameraSender: RtpSender? = null
+    private var screenMid: String? = null
+    private var cameraCapturer: CameraVideoCapturer? = null
+    private var cameraHelper: SurfaceTextureHelper? = null
+    private var cameraSource: VideoSource? = null
+    private var cameraTrack: VideoTrack? = null
+    private var channel: DataChannel? = null
     private val pendingIce = mutableListOf<IceCandidate>()
     private var capturer: ScreenCapturerAndroid? = null
     private var captureHelper: SurfaceTextureHelper? = null
@@ -98,10 +109,10 @@ class RtcSession(
             override fun onIceCandidatesRemoved(candidates: Array<out IceCandidate>) = Unit
             override fun onAddStream(stream: MediaStream) = Unit
             override fun onRemoveStream(stream: MediaStream) = Unit
-            override fun onDataChannel(channel: DataChannel) = Unit
+            override fun onDataChannel(channel: DataChannel) = onMain { bindChannel(channel) }
             override fun onRenegotiationNeeded() = Unit // Host controls offers; video direction is negotiated before capture.
-            override fun onAddTrack(receiver: RtpReceiver, streams: Array<out MediaStream>) = onMain { (receiver.track() as? VideoTrack)?.let(remoteVideo) }
-            override fun onTrack(transceiver: RtpTransceiver) = onMain { (transceiver.receiver.track() as? VideoTrack)?.let(remoteVideo) }
+            override fun onAddTrack(receiver: RtpReceiver, streams: Array<out MediaStream>) = Unit
+            override fun onTrack(transceiver: RtpTransceiver) = Unit // Bind both receiver tracks after remote SDP is applied.
             override fun onConnectionChange(state: PeerConnection.PeerConnectionState) = onMain { connectionChanged(state) }
         }))
         audioSource = factory.createAudioSource(MediaConstraints().apply {
@@ -110,7 +121,11 @@ class RtcSession(
         })
         audioTrack = factory.createAudioTrack("microphone", audioSource)
         peer.addTrack(audioTrack, listOf("call"))
-        if (isHost) configureVideo(peer.addTransceiver(MediaStreamTrack.MediaType.MEDIA_TYPE_VIDEO, RtpTransceiver.RtpTransceiverInit(RtpTransceiver.RtpTransceiverDirection.SEND_RECV)))
+        if (isHost) {
+            configureVideo(peer.addTransceiver(MediaStreamTrack.MediaType.MEDIA_TYPE_VIDEO, RtpTransceiver.RtpTransceiverInit(RtpTransceiver.RtpTransceiverDirection.SEND_RECV)))
+            cameraSender = peer.addTransceiver(MediaStreamTrack.MediaType.MEDIA_TYPE_VIDEO, RtpTransceiver.RtpTransceiverInit(RtpTransceiver.RtpTransceiverDirection.SEND_RECV)).sender
+            bindChannel(peer.createDataChannel("companion-v1", DataChannel.Init()))
+        }
         displays.registerDisplayListener(displayListener, handler)
     }
     private fun configureVideo(video: RtpTransceiver) {
@@ -133,16 +148,28 @@ class RtcSession(
     }
     suspend fun acceptOffer(sdp: String) {
         setDescription(SessionDescription(SessionDescription.Type.OFFER, sdp), local = false)
-        // The answerer must use the transceiver created by the remote offer.
-        // A separately pre-created slot is not automatically associated by libwebrtc.
-        configureVideo(peer.transceivers.first { it.mediaType == MediaStreamTrack.MediaType.MEDIA_TYPE_VIDEO })
+        bindVideoSlots()
         flushIce()
         val answer = createDescription(false, MediaConstraints())
         setDescription(answer, local = true)
         applyEncoding()
         signal("answer", JSONObject().put("sdp", answer.description))
     }
-    suspend fun acceptAnswer(sdp: String) { setDescription(SessionDescription(SessionDescription.Type.ANSWER, sdp), local = false); flushIce(); applyEncoding() }
+    suspend fun acceptAnswer(sdp: String) { setDescription(SessionDescription(SessionDescription.Type.ANSWER, sdp), local = false); bindVideoSlots(); flushIce(); applyEncoding() }
+    private fun bindVideoSlots() {
+        // libwebrtc disposes previous Java transceiver/sender/receiver wrappers on
+        // getTransceivers(). Read once and refresh ALL retained references together.
+        val videos = peer.transceivers.filter { it.mediaType == MediaStreamTrack.MediaType.MEDIA_TYPE_VIDEO }
+        val screen = videos.first()
+        configureVideo(screen)
+        screenMid = screen.mid
+        (screen.receiver.track() as? VideoTrack)?.let(remoteVideo)
+        videos.getOrNull(1)?.let {
+            it.direction = RtpTransceiver.RtpTransceiverDirection.SEND_RECV
+            cameraSender = it.sender
+            (it.receiver.track() as? VideoTrack)?.let(remoteCamera)
+        }
+    }
     fun addIce(data: JSONObject) {
         val candidate = IceCandidate(data.optString("sdpMid"), data.getInt("sdpMLineIndex"), data.getString("candidate"))
         if (peer.remoteDescription == null) pendingIce.add(candidate) else peer.addIceCandidate(candidate)
@@ -150,6 +177,97 @@ class RtcSession(
     private fun flushIce() { pendingIce.forEach { peer.addIceCandidate(it) }; pendingIce.clear() }
     // Mute the microphone before mixing, so shared media remains audible.
     fun microphone(enabled: Boolean) { if (!disposed) audioModule.setMicrophoneMute(!enabled) }
+
+    private fun bindChannel(value: DataChannel) {
+        if (value.label() != "companion-v1" || channel != null) { value.close(); value.dispose(); return }
+        channel = value
+        value.registerObserver(object : DataChannel.Observer {
+            override fun onBufferedAmountChange(previousAmount: Long) = Unit
+            override fun onStateChange() = onMain {
+                val ready = value.state() == DataChannel.State.OPEN
+                chatReady(ready)
+                if (ready) sendCameraState()
+            }
+            override fun onMessage(buffer: DataChannel.Buffer) {
+                if (buffer.binary || buffer.data.remaining() > 16384) return
+                val bytes = ByteArray(buffer.data.remaining())
+                buffer.data.get(bytes)
+                val message = runCatching { JSONObject(String(bytes, Charsets.UTF_8)) }.getOrNull() ?: return
+                onMain {
+                    when (message.optString("type")) {
+                        "camera" -> if (message.opt("enabled") is Boolean) peerMessage(message)
+                        "chat" -> {
+                            val text = message.opt("text") as? String
+                            if (text != null && text.isNotBlank() && text.length <= 2000) peerMessage(message)
+                        }
+                    }
+                }
+            }
+        })
+        if (value.state() == DataChannel.State.OPEN) { chatReady(true); sendCameraState() }
+    }
+    private fun sendData(message: JSONObject) {
+        val c = checkNotNull(channel) { "文字通道尚未连接" }
+        check(c.state() == DataChannel.State.OPEN && c.bufferedAmount() <= 65536) { "消息尚未发送，请稍后重试" }
+        check(c.send(DataChannel.Buffer(ByteBuffer.wrap(message.toString().toByteArray(Charsets.UTF_8)), false))) { "消息发送失败，请重试" }
+    }
+    fun sendChat(text: String) {
+        require(text.isNotBlank() && text.length <= 2000) { "消息需为 1–2000 个字符" }
+        sendData(JSONObject().put("type", "chat").put("text", text))
+    }
+    private fun sendCameraState() {
+        val c = channel ?: return
+        if (c.state() != DataChannel.State.OPEN) return
+        val data = JSONObject().put("type", "camera").put("enabled", cameraTrack != null).toString()
+        c.send(DataChannel.Buffer(ByteBuffer.wrap(data.toByteArray(Charsets.UTF_8)), false))
+    }
+    fun startCamera(): VideoTrack {
+        check(cameraSender != null && channel?.state() == DataChannel.State.OPEN) { "摄像头通道未就绪，请确认双方使用新版客户端" }
+        check(cameraCapturer == null)
+        val enumerator = Camera2Enumerator(context)
+        val device = enumerator.deviceNames.firstOrNull { enumerator.isFrontFacing(it) }
+            ?: enumerator.deviceNames.firstOrNull() ?: error("没有找到摄像头")
+        val events = object : CameraVideoCapturer.CameraEventsHandler {
+            override fun onCameraError(error: String) = onMain { cameraFailed("摄像头启动失败或已断开") }
+            override fun onCameraDisconnected() = onMain { cameraFailed("摄像头已断开") }
+            override fun onCameraFreezed(error: String) = onMain { cameraFailed("摄像头无响应") }
+            override fun onCameraOpening(name: String) = Unit
+            override fun onFirstFrameAvailable() = Unit
+            override fun onCameraClosed() = Unit
+        }
+        try {
+            val capture = checkNotNull(enumerator.createCapturer(device, events)).also { cameraCapturer = it }
+            val helper = SurfaceTextureHelper.create("CameraCapture", egl.eglBaseContext).also { cameraHelper = it }
+            val source = factory.createVideoSource(false).also { cameraSource = it }
+            capture.initialize(helper, context, source.capturerObserver)
+            val track = factory.createVideoTrack("camera", source).also { cameraTrack = it }
+            check(cameraSender?.setTrack(track, false) == true) { "无法连接摄像头轨道" }
+            source.adaptOutputFormat(1280,720,30)
+            capture.startCapture(1280,720,30)
+            val parameters = cameraSender!!.parameters
+            parameters.encodings.forEach { it.maxBitrateBps = 2_000_000; it.maxFramerate = 30 }
+            if (parameters.encodings.isNotEmpty()) check(cameraSender!!.setParameters(parameters))
+            sendCameraState()
+            return track
+        } catch (e: Exception) { stopCamera(); throw e }
+    }
+    fun switchCamera() {
+        cameraCapturer?.switchCamera(object : CameraVideoCapturer.CameraSwitchHandler {
+            override fun onCameraSwitchDone(front: Boolean) = Unit
+            override fun onCameraSwitchError(error: String) = onMain { cameraFailed("无法切换摄像头，请重新开启") }
+        })
+    }
+    fun stopCamera() {
+        val capture = cameraCapturer
+        cameraCapturer = null
+        cameraSender?.setTrack(null, false)
+        try { capture?.stopCapture() } finally {
+            capture?.dispose(); cameraTrack?.dispose(); cameraTrack = null
+            cameraSource?.dispose(); cameraSource = null
+            cameraHelper?.dispose(); cameraHelper = null
+            if (!disposed) sendCameraState()
+        }
+    }
 
     fun startScreen(data: Intent, selectedQuality: Quality) {
         check(capturer == null)
@@ -256,6 +374,7 @@ class RtcSession(
             val lines = mutableListOf<String>()
             values.filter { it.type in listOf("outbound-rtp","inbound-rtp") && (it.members["kind"] == "video" || it.members["mediaType"] == "video") }.forEach { row ->
                 val m = row.members
+                if (m["mid"]?.toString() != screenMid) return@forEach
                 val sending = row.type == "outbound-rtp"
                 val bytes = (m[if (sending) "bytesSent" else "bytesReceived"] as? Number)?.toLong() ?: 0L
                 val frames = (m[if (sending) "framesEncoded" else "framesDecoded"] as? Number)?.toLong() ?: 0L
@@ -282,6 +401,7 @@ class RtcSession(
         if (disposed) return
         disposed = true
         displays.unregisterDisplayListener(displayListener)
+        stopCamera(); channel?.unregisterObserver(); channel?.close(); channel?.dispose(); channel = null
         stopScreen(); peer.close(); peer.dispose()
         audioTrack.dispose(); audioSource.dispose(); factory.dispose(); audioModule.release()
         // Renderers detach on the next Compose frame, then release the shared EGL context.

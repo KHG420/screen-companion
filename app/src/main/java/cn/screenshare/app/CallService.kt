@@ -34,7 +34,14 @@ data class Quality(
         val presets = listOf("均衡" to AUTO, "文字清晰" to CLEAR, "动态流畅" to SMOOTH, "4K 超清" to UHD)
     }
 }
+data class ChatMessage(val text: String, val mine: Boolean)
 data class CallState(
+    val cameraOn: Boolean = false,
+    val localCamera: org.webrtc.VideoTrack? = null,
+    val remoteCamera: org.webrtc.VideoTrack? = null,
+    val remoteCameraOn: Boolean = false,
+    val chatReady: Boolean = false,
+    val chatMessages: List<ChatMessage> = emptyList(),
     val active: Boolean = false,
     val roomId: String = "",
     val role: String = "",
@@ -91,12 +98,12 @@ class CallService : Service() {
         }
         return START_NOT_STICKY
     }
-    fun foreground(sharing: Boolean) {
+    fun foreground(sharing: Boolean, camera: Boolean = state.value.cameraOn) {
         val open = PendingIntent.getActivity(this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
         val end = PendingIntent.getService(this, 1, Intent(this, CallService::class.java).setAction(END), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
         val notification = NotificationCompat.Builder(this, "call").setSmallIcon(R.drawable.ic_notification)
-            .setContentTitle(if (sharing) "正在共享你的屏幕" else "同屏通话进行中")
-            .setContentText(if (sharing) "对方可以看到屏幕内容，点此返回控制" else "麦克风用于双方语音，点此返回通话")
+            .setContentTitle(if (sharing) "正在共享你的屏幕" else if (camera) "摄像头视频通话进行中" else "同屏通话进行中")
+            .setContentText(if (sharing) "对方可以看到屏幕内容，点此返回控制" else if (camera) "摄像头和麦克风正在使用，点此返回控制" else "麦克风用于双方语音，点此返回通话")
             .setContentIntent(open).setOngoing(true).setSilent(true)
             .setCategory(NotificationCompat.CATEGORY_CALL).addAction(0, "挂断", end)
         if (sharing) {
@@ -104,7 +111,8 @@ class CallService : Service() {
             notification.addAction(0, "停止共享", stop)
         }
         val microphoneType = if (Build.VERSION.SDK_INT >= 30) ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE else 0
-        val type = microphoneType or (if (sharing) ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION else 0)
+        val cameraType = if (camera && Build.VERSION.SDK_INT >= 30) ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA else 0
+        val type = microphoneType or cameraType or (if (sharing) ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION else 0)
         startForeground(NOTIFICATION_ID, notification.build(), type)
     }
     override fun onBind(intent: Intent?): IBinder? = null
