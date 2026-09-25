@@ -1,10 +1,10 @@
-# Screen Companion · 同屏
+# Screen Companion · 同屏搭子
 
 **English** | [简体中文](README.zh-CN.md)
 
 Two-person screen sharing, camera video calls, and text/voice chat for Android and desktop browsers. Create a room, share its eight-digit code, talk, and take turns sharing a screen. The Android client uses Kotlin and Jetpack Compose; the desktop client uses native JavaScript and WebRTC. Both use the same Go signaling service built with the standard library.
 
-Version **0.5.0** is a development and testing release. It does not include accounts, remote control, or recording storage. Screen video, microphone audio, and supported shared media audio travel over WebRTC. HTTP long polling exchanges only SDP, ICE candidates, and sharing state; the signaling server does not forward media. Devices connect directly when possible, with TURN as a fallback. High resolution and low latency are not guaranteed across physical devices and networks.
+Version **0.5.1** is a development and testing release. It does not include accounts, remote control, or recording storage. Screen video, microphone audio, and supported shared media audio travel over WebRTC. HTTP long polling exchanges only SDP, ICE candidates, and sharing state; the signaling server does not forward media. Devices connect directly when possible, with TURN as a fallback. High resolution and low latency are not guaranteed across physical devices and networks.
 
 ## Self-hosting and supported platforms
 
@@ -13,6 +13,12 @@ This repository does not provide a public test service or a preconfigured server
 - **Desktop:** recent Chrome or Edge on Windows, macOS, or Linux. No native desktop installation is required. Microphone and screen capture require browser and operating-system permission.
 - **Android:** Android 10 or later.
 - **Room model:** two participants, bidirectional voice, and one shared screen at a time. iOS and multiparty calls are outside the current scope.
+
+## 0.5.1 name, icon, and landscape viewing
+
+The Chinese app name is now **同屏搭子**. The Android launcher and desktop website share the white-and-golden puppy icon. The package ID and signing identity remain unchanged for in-place updates.
+
+Android fullscreen follows the received screen's orientation even when system auto-rotate is disabled. Leaving fullscreen restores the prior orientation setting. Source/viewport changes reset zoom and pan to show the complete frame; screens with different aspect ratios retain black margins instead of cropping.
 
 ## 0.5.0 call experience
 
@@ -75,11 +81,14 @@ During a call, open **Quality and audio** (`画质与声音`), then expand or ta
 
 Resolution, FPS, and bitrate are independent: for example, **4K / 25 FPS / 17.5 Mbps**. Portrait orientation and source aspect ratio are respected. Lower-resolution sources are not enlarged to claim 4K. WebRTC congestion control remains active.
 
+Android defaults to preserving resolution, keeping common 1080×2400 phone screens at native size instead of reducing them to 864×1920. Resource constraints may reduce FPS. Desktop retains its balanced default.
+
 Presets:
 
 | Preset | Resolution | FPS | Bitrate ceiling |
 | --- | --- | --- | --- |
-| Balanced | 1080p | 30 | 8 Mbps |
+| HD (Android default, preserve resolution) | Up to 2560×1440 | 30 | 12 Mbps |
+| Balanced (desktop default) | 1080p | 30 | 8 Mbps |
 | Clear text | 1440p | 24 | 12 Mbps |
 | Smooth motion | 1080p | 60 | 10 Mbps |
 | 4K | 2160p | 30 | 24 Mbps |

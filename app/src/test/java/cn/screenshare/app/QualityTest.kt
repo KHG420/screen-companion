@@ -3,6 +3,18 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class QualityTest {
+    @Test fun defaultKeepsTallPhonePixelsAndPrioritizesClarity() {
+        val q = CallState().quality
+        assertEquals(Quality.DEFAULT, q)
+        assertEquals(1080 to 2400, q.captureSize(1080,2400))
+        assertEquals(2400 to 1080, q.captureSize(2400,1080))
+        assertEquals(720 to 1600, q.captureSize(720,1600))
+        assertEquals(VideoPriority.RESOLUTION, q.priority)
+        assertTrue(q.detailContent)
+        assertEquals(30, q.fps)
+        assertEquals(12_000_000, q.bitrate)
+        assertEquals(VideoPriority.BALANCED, Quality.AUTO.priority)
+    }
     @Test fun sourceAspectAndNoUpscaling() {
         assertEquals(1080 to 1920, Quality.UHD.captureSize(1080,1920))
         assertEquals(2160 to 3840, Quality.UHD.captureSize(2160,3840))

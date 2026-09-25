@@ -70,7 +70,7 @@ class RtcSession(
     private var playbackRecord: AudioRecord? = null
     private val playbackSamples = ShortArray(480) // 10 ms at the ADM input rate.
     @Volatile private var playbackMuted = false
-    private var quality = Quality.AUTO
+    private var quality = Quality.DEFAULT
     private data class VideoSample(val time: Double, val bytes: Long, val frames: Long, val counters: Map<String, Double>)
     private val videoSamples = mutableMapOf<String, VideoSample>()
     private val displays = context.getSystemService(DisplayManager::class.java)

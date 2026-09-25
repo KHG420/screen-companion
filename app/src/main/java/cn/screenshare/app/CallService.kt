@@ -28,12 +28,15 @@ data class Quality(
         return maxOf(2,(w*scale).toInt()/2*2) to maxOf(2,(h*scale).toInt()/2*2)
     }
     companion object {
+        // Keep common 1080×2400 phone screens at native size and avoid automatic
+        // spatial downscaling of text. Congestion control may still reduce FPS.
+        val DEFAULT = Quality(2560,1440,30,12_000_000,VideoPriority.RESOLUTION)
         val AUTO = Quality()
         val CLEAR = Quality(2560,1440,24,12_000_000,VideoPriority.RESOLUTION)
         val SMOOTH = Quality(1920,1080,60,10_000_000,VideoPriority.FRAMERATE)
         val UHD = Quality(3840,2160,30,24_000_000,VideoPriority.RESOLUTION)
         val UHD60 = Quality(3840,2160,60,40_000_000,VideoPriority.RESOLUTION)
-        val presets = listOf("均衡" to AUTO, "文字清晰" to CLEAR, "动态流畅" to SMOOTH, "4K 超清" to UHD, "4K · 60 帧" to UHD60)
+        val presets = listOf("高清默认" to DEFAULT, "均衡" to AUTO, "文字清晰" to CLEAR, "动态流畅" to SMOOTH, "4K 超清" to UHD, "4K · 60 帧" to UHD60)
     }
 }
 data class ChatMessage(val text: String, val mine: Boolean)
@@ -59,7 +62,7 @@ data class CallState(
     val shareBusy: Boolean = false,
     val systemAudio: Boolean = false,
     val systemMuted: Boolean = false,
-    val quality: Quality = Quality.AUTO,
+    val quality: Quality = Quality.DEFAULT,
     val error: String? = null,
     val notice: String? = null,
     val stats: String = "",
@@ -109,7 +112,7 @@ class CallService : Service() {
         val open = PendingIntent.getActivity(this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
         val end = PendingIntent.getService(this, 1, Intent(this, CallService::class.java).setAction(END), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
         val notification = NotificationCompat.Builder(this, "call").setSmallIcon(R.drawable.ic_notification)
-            .setContentTitle(if (sharing) "正在共享你的屏幕" else if (camera) "摄像头视频通话进行中" else "同屏通话进行中")
+            .setContentTitle(if (sharing) "正在共享你的屏幕" else if (camera) "摄像头视频通话进行中" else "${getString(R.string.app_name)}通话进行中")
             .setContentText(if (sharing) "对方可以看到屏幕内容，点此返回控制" else if (camera) "摄像头正在使用，点此返回控制" else "点此返回画面、声音和聊天控制")
             .setContentIntent(open).setOngoing(true).setSilent(true)
             .setCategory(NotificationCompat.CATEGORY_CALL).addAction(0, "挂断", end)

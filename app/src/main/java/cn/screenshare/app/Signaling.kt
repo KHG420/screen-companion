@@ -15,7 +15,7 @@ data class RoomCredentials(val roomId: String, val role: String, val token: Stri
 object ServerAddress {
     fun invitation(input: String, allowHttp: Boolean): Pair<String, String> {
         val uri = try { URI(input.trim()) } catch (_: Exception) { throw IllegalArgumentException("请输入完整的邀请链接") }
-        require(uri.host != null && uri.userInfo == null && uri.query == null && uri.path.orEmpty() in listOf("", "/", "/screenshare", "/screenshare/")) { "邀请链接应指向同屏首页" }
+        require(uri.host != null && uri.userInfo == null && uri.query == null && uri.path.orEmpty() in listOf("", "/", "/screenshare", "/screenshare/")) { "邀请链接应指向同屏搭子首页" }
         val room = uri.fragment.orEmpty().removePrefix("room=")
         require(uri.fragment == "room=$room" && room.matches(Regex("[0-9]{8}"))) { "邀请链接缺少有效的 8 位房间号" }
         val address = normalize(URI(uri.scheme, null, uri.host, uri.port, null, null, null).toString(), allowHttp)

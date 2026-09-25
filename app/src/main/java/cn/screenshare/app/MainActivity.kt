@@ -10,6 +10,7 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.content.pm.ActivityInfo
 import android.media.projection.MediaProjectionManager
 import android.os.Build
 import android.os.Bundle
@@ -23,6 +24,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -56,6 +58,9 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 import org.webrtc.RendererCommon
@@ -107,6 +112,7 @@ private fun ScreenShareApp(pip: Boolean) {
     var permissionError by rememberSaveable { mutableStateOf<String?>(null) }
     var explainShare by rememberSaveable { mutableStateOf(false) }
     var fullscreen by rememberSaveable { mutableStateOf(false) }
+    var remoteAspect by remember { mutableFloatStateOf(9f / 16f) }
     var inviteOpen by remember { mutableStateOf(false) }
     val view = LocalView.current
     DisposableEffect(state.remoteSharing, state.remoteCameraOn, view) {
@@ -114,7 +120,30 @@ private fun ScreenShareApp(pip: Boolean) {
         onDispose { view.keepScreenOn = false }
     }
     // Keep the video at one composition location when toggling fullscreen or PiP.
-    val remoteScreen = remember { movableContentOf<VideoTrack?, Modifier> { track, modifier -> RemoteScreen(track, modifier) } }
+    val remoteScreen = remember { movableContentOf<VideoTrack?, Modifier> { track, modifier ->
+        RemoteScreen(track, modifier, onAspectChanged = { remoteAspect = it })
+    } }
+    if (fullscreen && state.remoteSharing && !pip) {
+        val activity = context as Activity
+        DisposableEffect(activity) {
+            val previousOrientation = activity.requestedOrientation
+            val controller = WindowCompat.getInsetsController(activity.window, view)
+            val previousBehavior = controller.systemBarsBehavior
+            controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            controller.hide(WindowInsetsCompat.Type.systemBars())
+            onDispose {
+                activity.requestedOrientation = previousOrientation
+                controller.systemBarsBehavior = previousBehavior
+                controller.show(WindowInsetsCompat.Type.systemBars())
+            }
+        }
+        SideEffect {
+            // Explicit fullscreen follows the source even when the phone's auto-rotate is off.
+            val orientation = if (remoteAspect > 1f) ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+                else ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
+            if (activity.requestedOrientation != orientation) activity.requestedOrientation = orientation
+        }
+    }
     val snack = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val callUi = rememberSaveableStateHolder()
@@ -158,13 +187,13 @@ private fun ScreenShareApp(pip: Boolean) {
     BackHandler(fullscreen) { fullscreen = false }
     val immersive = state.remoteSharing && (fullscreen || pip)
     // Android 15 draws behind navigation bars; paint a stable light backing for system controls.
-    Box(Modifier.fillMaxSize().background(Color(0xFFFFF9F0)).navigationBarsPadding()) {
+    Box(Modifier.fillMaxSize().background(Color(0xFFFFF9F0)).navigationBarsPadding().displayCutoutPadding()) {
       Surface(Modifier.fillMaxSize()) {
             Scaffold(
                 snackbarHost = { SnackbarHost(snack) },
                 topBar = {
                     if (!immersive) Row(Modifier.fillMaxWidth().statusBarsPadding().padding(start = 24.dp, end = 12.dp, top = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text("同屏", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                        Text(stringResource(R.string.app_name), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
                         if (!state.active) TextButton(onClick = { settings = true }) { Text("连接设置") }
                         else Text(state.status, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
                     }
@@ -211,7 +240,7 @@ private fun ScreenShareApp(pip: Boolean) {
     if (explainShare) AlertDialog(
         onDismissRequest = { explainShare = false },
         title = { Text("开始共享屏幕？") },
-        text = { Text("对方将看到你选择共享的内容，并听到允许采集的媒体声音。静音仅关闭麦克风。部分应用、受保护内容和通话声音无法共享。通知、密码和聊天消息可能出现在画面中。随时返回同屏即可停止共享；允许通知后，也可从通知栏停止。") },
+        text = { Text("对方将看到你选择共享的内容，并听到允许采集的媒体声音。静音仅关闭麦克风。部分应用、受保护内容和通话声音无法共享。通知、密码和聊天消息可能出现在画面中。随时返回同屏搭子即可停止共享；允许通知后，也可从通知栏停止。") },
         confirmButton = { TextButton(onClick = {
             explainShare = false
             capture.launch(context.getSystemService(MediaProjectionManager::class.java).createScreenCaptureIntent())
@@ -400,10 +429,13 @@ private fun CallScreen(state: CallState, remoteScreen: @Composable (VideoTrack?,
 }
 
 @Composable
-private fun RemoteScreen(track: VideoTrack?, modifier: Modifier) {
+private fun RemoteScreen(track: VideoTrack?, modifier: Modifier, onAspectChanged: (Float) -> Unit = {}) {
     val context = LocalContext.current
     val rtc = CallService.current?.session?.rtc
-    var videoAspect by remember(track) { mutableFloatStateOf(9f / 16f) }
+    // The callback and its aspect state have the same lifetime as the renderer.
+    // Renegotiation can replace a Java VideoTrack wrapper without replacing this renderer.
+    var videoAspect by remember(rtc) { mutableFloatStateOf(9f / 16f) }
+    LaunchedEffect(videoAspect) { onAspectChanged(videoAspect) }
     var firstFrame by remember(rtc) { mutableStateOf(false) }
     val renderer = remember(rtc) { if (rtc == null) null else SurfaceViewRenderer(context).apply {
         init(rtc.egl.eglBaseContext, object : RendererCommon.RendererEvents {
@@ -420,6 +452,11 @@ private fun RemoteScreen(track: VideoTrack?, modifier: Modifier) {
     var zoom by remember(track) { mutableFloatStateOf(1f) }
     var pan by remember(track) { mutableStateOf(Offset.Zero) }
     var bounds by remember { mutableStateOf(androidx.compose.ui.unit.IntSize.Zero) }
+    LaunchedEffect(videoAspect, bounds) {
+        // A zoom/pan from the previous viewport must not crop a newly rotated screen.
+        zoom = 1f
+        pan = Offset.Zero
+    }
     DisposableEffect(track, renderer) {
         if (renderer != null) track?.addSink(renderer)
         onDispose { if (renderer != null) runCatching { track?.removeSink(renderer) } }
@@ -456,7 +493,7 @@ private fun InviteDialog(onDismiss: () -> Unit, onSave: (String, String) -> Unit
     var error by remember { mutableStateOf<String?>(null) }
     AlertDialog(onDismissRequest = onDismiss, title = { Text("粘贴邀请链接") }, text = {
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text("填写对方从同屏复制的链接，会带入服务地址和房间号。")
+            Text("填写对方从同屏搭子复制的链接，会带入服务地址和房间号。")
             OutlinedTextField(value, { value = it; error = null }, label = { Text("邀请链接") }, modifier = Modifier.fillMaxWidth(), maxLines = 3, isError = error != null, supportingText = { error?.let { Text(it) } })
         }
     }, confirmButton = { TextButton(onClick = {
