@@ -3,6 +3,7 @@ export class ApiError extends Error {
   constructor(status, message) { super(message); this.status = status; }
 }
 export const qualities = {
+  hd: { width:2560, height:1440, fps:30, bitrate:12_000_000, priority:"maintain-resolution", resolutionLocked:true, fpsLocked:false },
   auto: { width: 1920, height: 1080, fps: 30, bitrate: 8_000_000, priority: 'balanced' },
   clear: { width: 2560, height: 1440, fps: 24, bitrate: 12_000_000, priority: 'maintain-resolution' },
   smooth: { width: 1920, height: 1080, fps: 60, bitrate: 10_000_000, priority: 'maintain-framerate' },
@@ -16,7 +17,20 @@ export function validateQuality(q) {
   if (!Number.isInteger(q.fps) || q.fps < 1 || q.fps > 60) throw new Error('帧率请输入 1–60 的整数。');
   if (!Number.isInteger(q.bitrate) || q.bitrate < 500_000 || q.bitrate > 80_000_000) throw new Error('码率上限请输入 0.5–80 Mbps。');
   if (!['balanced', 'maintain-resolution', 'maintain-framerate'].includes(q.priority)) throw new Error('请选择有效的调整策略。');
-  return { width:q.width, height:q.height, fps:q.fps, bitrate:q.bitrate, priority:q.priority };
+  for (const key of ['resolutionLocked','fpsLocked']) if (q[key] !== undefined && typeof q[key] !== 'boolean') throw new Error('锁定选项无效。');
+  return { width:q.width, height:q.height, fps:q.fps, bitrate:q.bitrate, priority:q.priority, resolutionLocked:q.resolutionLocked===true, fpsLocked:q.fpsLocked===true };
+}
+export function degradationPreference(q) {
+  if (q.resolutionLocked && q.fpsLocked) return 'maintain-framerate-and-resolution';
+  if (q.resolutionLocked) return 'maintain-resolution';
+  if (q.fpsLocked) return 'maintain-framerate';
+  return q.priority;
+}
+export function qualityControlLabel(q) {
+  if (q.resolutionLocked && q.fpsLocked) return '自定义 · 分辨率与帧率已锁定';
+  if (q.resolutionLocked) return '分辨率已锁定 · 允许自动降帧';
+  if (q.fpsLocked) return '帧率已锁定 · 允许自动降分辨率';
+  return '自动调整 · ' + ({balanced:'自动平衡','maintain-resolution':'清晰优先','maintain-framerate':'帧率优先'}[q.priority]);
 }
 export function captureBounds(q, settings = {}) {
   return settings.height > settings.width ? { width:q.height, height:q.width } : { width:q.width, height:q.height };
@@ -57,7 +71,7 @@ export function friendly(error) {
 export class Call {
   constructor(base, changed = () => {}) {
     this.base = base.replace(/\/$/, ''); this.changed = changed;
-    this.state = { status: '正在连接', connected: false, sharing: false, remoteSharing: false, muted: true, micAvailable: false, micBusy: false, micIssue: '', systemMuted: false, cameraOn: false, cameraBusy: false, remoteCameraOn: false, chatReady: false, messages: [], busy: false, quality: { ...qualities.auto }, qualityBusy: false };
+    this.state = { status: '正在连接', connected: false, sharing: false, remoteSharing: false, muted: true, micAvailable: false, micBusy: false, micIssue: '', systemMuted: false, cameraOn: false, cameraBusy: false, remoteCameraOn: false, chatReady: false, messages: [], busy: false, quality: { ...qualities.hd }, qualityBusy: false };
     this.abort = new AbortController(); this.pendingIce = []; this.sendChain = Promise.resolve(); this.closed = false;
     this.videoSamples = new Map(); this.statsTimer = null; this.connectionTimer = null; this.reconnectTimer = null;
   }
@@ -362,7 +376,7 @@ export class Call {
       const bounds = captureBounds(q, track.getSettings());
       // A detail hint makes libwebrtc treat BALANCED as MAINTAIN_RESOLUTION.
       // Motion content keeps the explicitly selected adaptation policy effective.
-      track.contentHint = q.priority === 'maintain-resolution' && q.fps <= 30 ? 'detail' : 'motion';
+      track.contentHint = (q.resolutionLocked || (!q.fpsLocked && q.priority === 'maintain-resolution')) && q.fps <= 30 ? 'detail' : 'motion';
       const next = { width:{ideal:bounds.width,max:bounds.width}, height:{ideal:bounds.height,max:bounds.height}, frameRate:{ideal:q.fps,max:q.fps} };
       const current = track.getConstraints();
       if (Object.keys(next).some(key => current[key]?.ideal !== next[key].ideal || current[key]?.max !== next[key].max)) {
@@ -371,11 +385,20 @@ export class Call {
     }
     if (this.video?.sender) {
       const p = this.video.sender.getParameters();
-      p.degradationPreference = q.priority;
+      p.degradationPreference = degradationPreference(q);
       for (const encoding of p.encodings || []) { encoding.maxBitrate=q.bitrate; encoding.maxFramerate=q.fps;
         const settings=track?.getSettings() || {}; const bounds=captureBounds(q,settings);
         encoding.scaleResolutionDownBy=Math.max(1,(settings.width||bounds.width)/bounds.width,(settings.height||bounds.height)/bounds.height); }
-      if (p.encodings?.length) await this.video.sender.setParameters(p);
+      if (p.encodings?.length) {
+        try {
+          await this.video.sender.setParameters(p);
+          if ((q.resolutionLocked || q.fpsLocked) && this.video.sender.getParameters().degradationPreference !== p.degradationPreference)
+            throw new Error('浏览器未接受锁定策略');
+        } catch (error) {
+          if (q.resolutionLocked || q.fpsLocked) throw new Error('浏览器未能执行手动锁定，未自动改用其他策略。请升级浏览器，或明确取消对应锁定后重试。' + friendly(error));
+          throw error;
+        }
+      }
     }
   }
   async share() {
@@ -442,6 +465,13 @@ export class Call {
           const why={cpu:'设备编码性能受限',bandwidth:'网络带宽受限',other:'编码器调整中'}[r.qualityLimitationReason];
           lines.push(`${direction==='outbound-rtp'?'发送':'接收'} ${r.frameWidth}×${r.frameHeight} · ${rate.fps===null?'测量中':rate.fps.toFixed(1)+' FPS'} · ${rate.mbps===null?'测量中':rate.mbps.toFixed(2)+' Mbps'}${why?' · '+why:''}`);
           const timing=videoTiming(r,previous);if(timing)lines.push(timing);
+          if (direction === 'outbound-rtp') {
+            const q=this.state.quality, source=this.display?.getVideoTracks()[0]?.getSettings() || {};
+            if (q.resolutionLocked && source.width && source.height && (Math.max(r.frameWidth,r.frameHeight)<Math.max(source.width,source.height) || Math.min(r.frameWidth,r.frameHeight)<Math.min(source.width,source.height)))
+              lines.push('实际发送尺寸低于锁定采集尺寸；请检查设备能力与网络，设置未被改写');
+            if (q.fpsLocked && rate.fps!==null && rate.fps<q.fps*.85)
+              lines.push('实际帧率低于锁定目标；静止画面、采集、设备或网络可能限制出帧，设置未被改写');
+          }
         }
       }
       const patch={mediaStats:lines.join('；') || ((this.state.sharing||this.state.remoteSharing)?'正在测量视频…':'')};

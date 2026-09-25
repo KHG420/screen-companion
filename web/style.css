@@ -54,3 +54,5 @@ h1{font-family:"Tongping Title","PingFang SC",sans-serif;font-weight:400}
 @media(max-width:1050px){.chat-panel{width:290px}.controls{justify-content:flex-start}.controls button{padding-inline:12px}.camera-grid figure{width:120px}.camera-grid video{height:72px}}
 @media(max-width:900px){.room-bar{flex-direction:row;align-items:center;flex-wrap:wrap}.controls{flex-direction:row}.in-call main{padding-inline:16px}.in-call header{padding-inline:16px}}
 @media(max-width:700px){.call-workspace{flex-direction:column}.chat-panel{width:100%;height:380px;max-height:none}.room-bar>div{gap:6px}.stage{flex:none}.camera-grid{max-width:60%}.controls{position:static}.stage-actions{right:8px}.stage-actions button{padding-inline:10px}}
+
+.quality-locks{display:flex;flex-wrap:wrap;gap:12px 24px;margin-top:16px}.quality-locks label{display:flex;align-items:center;gap:10px;min-height:44px;margin:0}.quality-locks input{width:20px;height:20px;accent-color:var(--green);padding:0}

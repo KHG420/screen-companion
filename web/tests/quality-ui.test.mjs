@@ -1,0 +1,31 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {readFile} from 'node:fs/promises';
+import vm from 'node:vm';
+import {Call, friendly, qualities, qualityControlLabel, degradationPreference} from '../call.js';
+
+test('quality form locks edited fields over a motion preset, and explicit preset resets locks',async()=>{
+  const html=await readFile(new URL('../index.html',import.meta.url),'utf8');
+  const elements=new Map([...html.matchAll(/id="([^"]+)"/g)].map(([,id])=>[id,{value:'',checked:false,disabled:false,addEventListener(){},options:[]} ]));
+  const el=id=>{assert.ok(elements.has(id),`missing HTML element ${id}`);return elements.get(id);};
+  el('resolution').options=['1280,720','1920,1080','2560,1440','3840,2160','custom'].map(value=>({value}));
+  const session=new Call('/api');
+  const context=vm.createContext({Call,friendly,qualities,qualityControlLabel,session,URLSearchParams,location:{hash:''},document:{getElementById:el,addEventListener(){}},window:{addEventListener(){}},setTimeout,clearTimeout});
+  const source=(await readFile(new URL('../app.js',import.meta.url),'utf8')).replace(/^import .*\n/,'');
+  vm.runInContext(source+'\ncall=session;',context);
+  await el('quality').onchange({target:{value:'smooth'}});
+  assert.equal(el('priority').disabled,false);assert.equal(el('lock-resolution').checked,false);
+  el('resolution').onchange({target:{value:'3840,2160'}});
+  assert.equal(el('quality').value,'custom');assert.equal(el('lock-resolution').checked,true);assert.equal(el('lock-fps').checked,false);assert.equal(el('priority').disabled,true);
+  el('quality-form').onsubmit({preventDefault(){}});await new Promise(setImmediate);
+  assert.equal(session.state.quality.width,3840);assert.equal(degradationPreference(session.state.quality),'maintain-resolution');
+  el('fps').value='45';el('fps').oninput();
+  el('quality-form').onsubmit({preventDefault(){}});await new Promise(setImmediate);
+  assert.equal(session.state.quality.fps,45);assert.equal(degradationPreference(session.state.quality),'maintain-framerate-and-resolution');
+  el('bitrate').value='3';el('bitrate').oninput();el('quality-form').onsubmit({preventDefault(){}});await new Promise(setImmediate);
+  assert.equal(session.state.quality.bitrate,3_000_000);assert.equal(degradationPreference(session.state.quality),'maintain-framerate-and-resolution');
+  await el('quality').onchange({target:{value:'auto'}});
+  assert.equal(el('lock-resolution').checked,false);assert.equal(el('lock-fps').checked,false);assert.equal(el('priority').disabled,false);assert.equal(degradationPreference(session.state.quality),'balanced');
+  el('long-edge').value='2560';el('long-edge').oninput();assert.equal(el('lock-resolution').checked,true);
+  el('lock-resolution').checked=false;el('lock-resolution').onchange();assert.equal(el('priority').disabled,false);
+});

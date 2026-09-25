@@ -151,7 +151,7 @@ test('1080p hardware is not excluded by an unrelated 4K60 capability gate',async
   const codecs=[{mimeType:'video/VP8'},{mimeType:'video/H264',sdpFmtpLine:'packetization-mode=1;profile-level-id=42001f'}];const probes=[];let preferred;
   const probe=async ({video})=>{probes.push(video);return {supported:video.width<=1920,smooth:video.framerate<=30,powerEfficient:true};};
   globalThis.RTCRtpSender={getCapabilities:()=>({codecs})};Object.defineProperty(globalThis,'navigator',{configurable:true,value:{mediaCapabilities:{encodingInfo:probe,decodingInfo:probe}}});
-  try{const c=new Call('/api'),video={setCodecPreferences:p=>preferred=p};await c.configureScreenCodecs(video);assert.deepEqual(preferred,[codecs[1],codecs[0]]);assert.equal(probes[0].width,1920);assert.equal(probes[0].height,1080);assert.equal(probes[0].framerate,30);assert.equal(probes[0].bitrate,8_000_000);
+  try{const c=new Call('/api'),video={setCodecPreferences:p=>preferred=p};await c.quality('auto');await c.configureScreenCodecs(video);assert.deepEqual(preferred,[codecs[1],codecs[0]]);assert.equal(probes[0].width,1920);assert.equal(probes[0].height,1080);assert.equal(probes[0].framerate,30);assert.equal(probes[0].bitrate,8_000_000);
     await c.quality({...c.state.quality,width:1280,height:720,fps:15,bitrate:2_000_000});await c.configureScreenCodecs(video);assert.equal(probes.at(-1).width,1280);assert.equal(probes.at(-1).framerate,15);assert.equal(probes.at(-1).bitrate,2_000_000);
   }finally{globalThis.RTCRtpSender=oldSender;if(old)Object.defineProperty(globalThis,'navigator',old);else delete globalThis.navigator;}
 });
@@ -164,7 +164,7 @@ test('all supported FPS values preserve independent size, bitrate and adaptation
     for(const priority of ['balanced','maintain-resolution','maintain-framerate'])
       for(let fps=1;fps<=60;fps++){
         const q={width,height,fps,bitrate:500_000+fps*100_000,priority};await c.quality(q);
-        assert.deepEqual(c.state.quality,q);assert.equal(constraints.width.max,width);assert.equal(constraints.height.max,height);assert.equal(constraints.frameRate.max,fps);
+        assert.deepEqual(c.state.quality,{...q,resolutionLocked:false,fpsLocked:false});assert.equal(constraints.width.max,width);assert.equal(constraints.height.max,height);assert.equal(constraints.frameRate.max,fps);
         assert.equal(parameters.encodings[0].maxFramerate,fps);assert.equal(parameters.encodings[0].maxBitrate,q.bitrate);assert.equal(parameters.degradationPreference,priority);
         assert.equal(track.contentHint,priority==='maintain-resolution'&&fps<=30?'detail':'motion');
         assert.equal(parameters.encodings[0].scaleResolutionDownBy,3840/width);
@@ -218,4 +218,42 @@ test('pending browser audio activation does not block receive-only room entry', 
   const c=new Call('/api');c.request=async()=>({roomId:'12345678',role:'guest',iceServers:[]});c.poll=()=>{};c.armDeadline=()=>{};
   try {await c.start('12345678');assert.equal(c.state.roomId,'12345678');assert.equal(c.closed,false);assert.equal(c.state.muted,true);}
   finally {c.end();globalThis.AudioContext=oldAudio;globalThis.RTCPeerConnection=oldPC;if(oldNavigator)Object.defineProperty(globalThis,'navigator',oldNavigator);else delete globalThis.navigator;}
+});
+
+
+test('manual locks override every automatic policy and survive bitrate changes',async()=>{
+  const {qualities}=await import('../call.js');
+  const c=new Call('/api');let constraints={},params={encodings:[{}]};
+  const track={getSettings:()=>({width:3840,height:2160}),getConstraints:()=>constraints,applyConstraints:async p=>{constraints=p;}};
+  c.display={getVideoTracks:()=>[track]};c.video={sender:{getParameters:()=>structuredClone(params),setParameters:async p=>{params=p;}}};
+  for(const priority of ['balanced','maintain-resolution','maintain-framerate']){
+    for(const [resolutionLocked,fpsLocked,expected] of [[true,false,'maintain-resolution'],[false,true,'maintain-framerate'],[true,true,'maintain-framerate-and-resolution']]){
+      await c.quality({...qualities.uhd,fps:45,priority,resolutionLocked,fpsLocked});
+      assert.equal(params.degradationPreference,expected);assert.equal(params.encodings[0].maxFramerate,45);
+      await c.quality({...c.state.quality,bitrate:3_000_000});
+      assert.equal(params.degradationPreference,expected);assert.equal(c.state.quality.resolutionLocked,resolutionLocked);assert.equal(c.state.quality.fpsLocked,fpsLocked);
+    }
+  }
+  await c.quality('smooth');assert.equal(c.state.quality.resolutionLocked,false);assert.equal(c.state.quality.fpsLocked,false);assert.equal(params.degradationPreference,'maintain-framerate');
+});
+
+test('unsupported or ignored browser lock rejects and restores previous quality without fallback',async()=>{
+  const c=new Call('/api');let params={encodings:[{}]},constraints={},attempts=[],ignore=false;
+  const track={getSettings:()=>({width:1920,height:1080}),getConstraints:()=>constraints,applyConstraints:async p=>{constraints=p;}};
+  c.display={getVideoTracks:()=>[track]};c.video={sender:{getParameters:()=>structuredClone(params),setParameters:async p=>{
+    attempts.push(p.degradationPreference);
+    if(p.degradationPreference==='maintain-framerate-and-resolution'){
+      if(ignore){params={...p,degradationPreference:'balanced'};return;}
+      throw new TypeError('unsupported enum');
+    }
+    params=p;
+  }}};
+  await c.quality('clear');const previous={...c.state.quality};
+  for(ignore of [false,true]){
+    attempts=[];
+    await assert.rejects(c.quality({...previous,resolutionLocked:true,fpsLocked:true}),/未自动改用其他策略/);
+    assert.deepEqual(c.state.quality,previous);
+    assert.deepEqual(attempts,['maintain-framerate-and-resolution','maintain-resolution']);
+    assert.equal(params.degradationPreference,'maintain-resolution');assert.equal(c.state.qualityBusy,false);
+  }
 });

@@ -1,4 +1,4 @@
-import { Call, friendly, qualities } from './call.js';
+import { Call, friendly, qualities, qualityControlLabel } from './call.js';
 const $ = id => document.getElementById(id);
 let call, starting = false, videoTrack, audioTrack, chatMessages = [], chatOpen = false, unread = 0;
 let cameraHidden = false, frameReady = false, frameCallback, frameGeneration = 0, qualityWaiting = false;
@@ -113,7 +113,7 @@ function render(s) {
   if(s.remoteAudio&&audioTrack!==s.remoteAudio){audioTrack=s.remoteAudio;$('remote-audio').srcObject=new MediaStream([audioTrack]);$('remote-audio').play().then(()=>$('play-audio').hidden=true).catch(()=>$('play-audio').hidden=false);}
   $('system-mute').hidden=!s.sharing||!s.systemAudio;$('system-mute').textContent=s.systemMuted?'开启共享声音':'关闭共享声音';$('system-mute').setAttribute('aria-pressed',String(s.systemMuted));
   $('share-hint').textContent=s.sharing?(s.systemAudio?(s.systemMuted?'共享声音已关闭，麦克风独立控制。':'正在共享画面和所选音频。关闭麦克风不会停止共享声音。'):'正在共享画面，当前未采集共享音频。需要声音时，停止后重新选择标签页并勾选分享音频。'):'共享声音：Chrome / Edge 选择标签页并勾选“同时分享音频”。其他共享方式取决于浏览器和系统。';
-  const q=s.quality;$('quality-target').textContent=`自己共享的目标：长边 ${q.width} × 短边 ${q.height} · ${q.fps} FPS · 上限 ${q.bitrate/1e6} Mbps`;
+  const q=s.quality;$('quality-target').textContent=`自己共享的目标：长边 ${q.width} × 短边 ${q.height} · ${q.fps} FPS · 上限 ${q.bitrate/1e6} Mbps · ${qualityControlLabel(q)}`;
   $('media-stats').textContent=s.mediaStats||'';$('quality-note').textContent=s.qualityNote||'';
   $('quality').disabled=$('apply-quality').disabled=!!(s.busy||s.qualityBusy);
   message(s.error||s.notice||'');
@@ -122,7 +122,7 @@ async function begin(room) {
   if (call || starting) return;
   if (!isSecureContext || !navigator.mediaDevices?.getUserMedia || !window.RTCPeerConnection) { message('请使用新版电脑浏览器，通过 HTTPS 安全地址打开。'); return; }
   if (room && !/^\d{8}$/.test(room)) { message('请输入八位数字房间号。'); return; }
-  starting = true; $('quality').value = 'auto'; fillQuality(qualities.auto); $('quality-result').textContent=''; message(); $('create').disabled = $('join').disabled = true;
+  starting = true; $('quality').value = 'hd'; fillQuality(qualities.hd); $('quality-result').textContent=''; message(); $('create').disabled = $('join').disabled = true;
   const session = new Call(new URL('api', location.href).href, render); call = session;
   try { render(session.state); await session.start(room); }
   catch (error) { session.fail(friendly(error)); }
@@ -137,18 +137,26 @@ $('hangup').onclick = () => call?.end('你已结束通话');
 $('mute').onclick = () => call?.mute();
 $('share').onclick = () => call?.state.sharing ? call.stopSharing() : call?.share();
 function fillQuality(q) {
-  $('long-edge').value=q.width; $('short-edge').value=q.height; $('fps').value=q.fps; $('bitrate').value=q.bitrate/1e6; $('priority').value=q.priority;
+  $('long-edge').value=q.width; $('short-edge').value=q.height; $('fps').value=q.fps; $('bitrate').value=q.bitrate/1e6; $('priority').value=q.priority; $('lock-resolution').checked=!!q.resolutionLocked; $('lock-fps').checked=!!q.fpsLocked; updateLocks();
   const res=`${q.width},${q.height}`; $('resolution').value=[...$('resolution').options].some(o=>o.value===res)?res:'custom';
 }
+function updateLocks() {
+  $('priority').disabled=$('lock-resolution').checked || $('lock-fps').checked;
+  $('lock-note').textContent=$('priority').disabled?'手动锁定优先；取消锁定才允许自动调整该项。':'未锁定的参数按所选自动策略调整。';
+}
+function markCustom() { $('quality').value='custom'; updateLocks(); }
+$('lock-resolution').onchange=$('lock-fps').onchange=markCustom;
+$('fps').oninput=()=>{$('lock-fps').checked=true;markCustom();};
+$('bitrate').oninput=$('priority').onchange=markCustom;
 async function applyQuality(q, preset='custom') {
   const session=call; if(!session)return;
   try { await session.quality(q); if(call!==session)return; fillQuality(call.state.quality); $('quality').value=preset; $('quality-result').textContent='目标参数已应用；实际发送画质见下方统计。'; if(call.state.sharing){qualityWaiting=true;waitForFrame();} }
   catch(error){if(call!==session)return; message(friendly(error)); $('quality-result').textContent=friendly(error); if(call)$('quality').value=Object.keys(qualities).find(k=>JSON.stringify(qualities[k])===JSON.stringify(call.state.quality)) || 'custom';}
 }
 $('quality').onchange=e=>applyQuality(e.target.value,e.target.value);
-$('resolution').onchange=e=>{if(e.target.value!=='custom'){const [w,h]=e.target.value.split(',');$('long-edge').value=w;$('short-edge').value=h;}};
-$('long-edge').oninput=$('short-edge').oninput=()=>{$('resolution').value='custom';};
-$('quality-form').onsubmit=e=>{e.preventDefault();applyQuality({width:Number($('long-edge').value),height:Number($('short-edge').value),fps:Number($('fps').value),bitrate:Math.round(Number($('bitrate').value)*1e6),priority:$('priority').value});};
+$('resolution').onchange=e=>{if(e.target.value!=='custom'){const [w,h]=e.target.value.split(',');$('long-edge').value=w;$('short-edge').value=h;$('lock-resolution').checked=true;markCustom();}};
+$('long-edge').oninput=$('short-edge').oninput=()=>{$('resolution').value='custom';$('lock-resolution').checked=true;markCustom();};
+$('quality-form').onsubmit=e=>{e.preventDefault();applyQuality({width:Number($('long-edge').value),height:Number($('short-edge').value),fps:Number($('fps').value),bitrate:Math.round(Number($('bitrate').value)*1e6),priority:$('priority').value,resolutionLocked:$('lock-resolution').checked,fpsLocked:$('lock-fps').checked});};
 $('copy').onclick = async () => {
   try { await navigator.clipboard.writeText(call.state.roomId); $('copy').textContent = '已复制'; setTimeout(() => $('copy').textContent = '复制房间号', 1800); }
   catch { message('无法自动复制，请手动选中房间号复制。'); }

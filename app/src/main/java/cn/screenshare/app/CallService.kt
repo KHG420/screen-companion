@@ -14,13 +14,30 @@ enum class VideoPriority(val label: String) {
 data class Quality(
     val longEdge: Int = 1920, val shortEdge: Int = 1080, val fps: Int = 30,
     val bitrate: Int = 8_000_000, val priority: VideoPriority = VideoPriority.BALANCED,
+    val resolutionLocked: Boolean = false, val fpsLocked: Boolean = false,
 ) {
     init {
         require(longEdge in 320..3840 && shortEdge in 180..2160 && longEdge >= shortEdge && longEdge % 2 == 0 && shortEdge % 2 == 0) { "长边 320–3840、短边 180–2160，均为偶数，且长边不小于短边" }
         require(fps in 1..60) { "帧率需为 1–60 的整数" }
         require(bitrate in 500_000..80_000_000) { "码率上限需为 0.5–80 Mbps" }
     }
-    val detailContent: Boolean get() = priority == VideoPriority.RESOLUTION && fps <= 30
+    val degradationPreference: org.webrtc.RtpParameters.DegradationPreference get() = when {
+        resolutionLocked && fpsLocked -> org.webrtc.RtpParameters.DegradationPreference.MAINTAIN_FRAMERATE_AND_RESOLUTION
+        resolutionLocked -> org.webrtc.RtpParameters.DegradationPreference.MAINTAIN_RESOLUTION
+        fpsLocked -> org.webrtc.RtpParameters.DegradationPreference.MAINTAIN_FRAMERATE
+        else -> when (priority) {
+            VideoPriority.BALANCED -> org.webrtc.RtpParameters.DegradationPreference.BALANCED
+            VideoPriority.RESOLUTION -> org.webrtc.RtpParameters.DegradationPreference.MAINTAIN_RESOLUTION
+            VideoPriority.FRAMERATE -> org.webrtc.RtpParameters.DegradationPreference.MAINTAIN_FRAMERATE
+        }
+    }
+    val detailContent: Boolean get() = (resolutionLocked || (!fpsLocked && priority == VideoPriority.RESOLUTION)) && fps <= 30
+    val controlLabel: String get() = when {
+        resolutionLocked && fpsLocked -> "自定义 · 分辨率与帧率已锁定"
+        resolutionLocked -> "分辨率已锁定 · 允许自动降帧"
+        fpsLocked -> "帧率已锁定 · 允许自动降分辨率"
+        else -> "自动调整 · ${priority.label}"
+    }
     val label: String get() = "${longEdge}×${shortEdge} · ${fps} FPS"
     fun captureSize(width: Int, height: Int): Pair<Int, Int> {
         val w = width.coerceAtLeast(2); val h = height.coerceAtLeast(2)
@@ -30,7 +47,7 @@ data class Quality(
     companion object {
         // Keep common 1080×2400 phone screens at native size and avoid automatic
         // spatial downscaling of text. Congestion control may still reduce FPS.
-        val DEFAULT = Quality(2560,1440,30,12_000_000,VideoPriority.RESOLUTION)
+        val DEFAULT = Quality(2560,1440,30,12_000_000,VideoPriority.RESOLUTION, resolutionLocked = true)
         val AUTO = Quality()
         val CLEAR = Quality(2560,1440,24,12_000_000,VideoPriority.RESOLUTION)
         val SMOOTH = Quality(1920,1080,60,10_000_000,VideoPriority.FRAMERATE)

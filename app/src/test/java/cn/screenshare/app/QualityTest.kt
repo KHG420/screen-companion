@@ -15,6 +15,20 @@ class QualityTest {
         assertEquals(12_000_000, q.bitrate)
         assertEquals(VideoPriority.BALANCED, Quality.AUTO.priority)
     }
+    @Test fun explicitLocksOverrideEveryAutomaticPolicy() {
+        for (priority in VideoPriority.entries) {
+            val q=Quality.UHD60.copy(priority=priority)
+            assertEquals(org.webrtc.RtpParameters.DegradationPreference.MAINTAIN_RESOLUTION,q.copy(resolutionLocked=true).degradationPreference)
+            assertEquals(org.webrtc.RtpParameters.DegradationPreference.MAINTAIN_FRAMERATE,q.copy(fpsLocked=true).degradationPreference)
+            val locked=q.copy(resolutionLocked=true,fpsLocked=true)
+            assertEquals(org.webrtc.RtpParameters.DegradationPreference.MAINTAIN_FRAMERATE_AND_RESOLUTION,locked.degradationPreference)
+            assertEquals(locked.degradationPreference,locked.copy(bitrate=500_000).degradationPreference)
+            assertEquals(3840 to 2160,locked.captureSize(3840,2160))
+            assertEquals(60,locked.fps)
+        }
+        assertTrue(Quality.DEFAULT.resolutionLocked)
+        assertFalse(Quality.SMOOTH.resolutionLocked)
+    }
     @Test fun sourceAspectAndNoUpscaling() {
         assertEquals(1080 to 1920, Quality.UHD.captureSize(1080,1920))
         assertEquals(2160 to 3840, Quality.UHD.captureSize(2160,3840))

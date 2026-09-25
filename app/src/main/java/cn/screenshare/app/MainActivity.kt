@@ -339,6 +339,7 @@ private fun CallScreen(state: CallState, remoteScreen: @Composable (VideoTrack?,
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text("画质、声音与连接", style = MaterialTheme.typography.titleLarge)
             Text("自己共享目标：${state.quality.label} · 上限 ${state.quality.bitrate / 1_000_000.0} Mbps", style = MaterialTheme.typography.bodyMedium)
+            Text(state.quality.controlLabel, style = MaterialTheme.typography.bodySmall)
             OutlinedButton(onClick = { moreOpen = false; qualityMenu = true }, enabled = !state.shareBusy) { Text("精确调整画质") }
             Text("声音输出", style = MaterialTheme.typography.titleSmall)
             if (Build.VERSION.SDK_INT >= 31 && context.checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED)
@@ -526,14 +527,16 @@ private fun QualityDialog(current: Quality, onDismiss: () -> Unit, onSave: (Qual
     var fps by remember { mutableStateOf(current.fps.toString()) }
     var mbps by remember { mutableStateOf((current.bitrate / 1_000_000.0).toString()) }
     var priority by remember { mutableStateOf(current.priority) }
+    var resolutionLocked by remember { mutableStateOf(current.resolutionLocked) }
+    var fpsLocked by remember { mutableStateOf(current.fpsLocked) }
     var error by remember { mutableStateOf<String?>(null) }
-    fun fill(q: Quality) { longEdge=q.longEdge.toString(); shortEdge=q.shortEdge.toString(); fps=q.fps.toString(); mbps=(q.bitrate/1_000_000.0).toString(); priority=q.priority; error=null }
+    fun fill(q: Quality) { longEdge=q.longEdge.toString(); shortEdge=q.shortEdge.toString(); fps=q.fps.toString(); mbps=(q.bitrate/1_000_000.0).toString(); priority=q.priority; resolutionLocked=q.resolutionLocked; fpsLocked=q.fpsLocked; error=null }
     AlertDialog(onDismissRequest=onDismiss, title={ Column(verticalArrangement=Arrangement.spacedBy(8.dp)) {
         Text("精确调整画质")
         error?.let { Text(it,color=MaterialTheme.colorScheme.error,style=MaterialTheme.typography.bodySmall,modifier=Modifier.semantics { liveRegion=LiveRegionMode.Polite }) }
     } }, text={
         Column(Modifier.heightIn(max=440.dp).verticalScroll(rememberScrollState()), verticalArrangement=Arrangement.spacedBy(12.dp)) {
-            Text("只调整自己共享的画面，语音保持连接。", style=MaterialTheme.typography.bodySmall)
+            Text("手动修改尺寸或帧率会锁定该项，自动策略不能覆盖。预设会重新填写参数与锁定状态。", style=MaterialTheme.typography.bodySmall)
             Quality.presets.chunked(2).forEach { row ->
                 Row(Modifier.fillMaxWidth(), horizontalArrangement=Arrangement.spacedBy(8.dp)) {
                     row.forEach { (name,q) -> OutlinedButton(onClick={fill(q)},modifier=Modifier.weight(1f)) { Text(name) } }
@@ -542,32 +545,40 @@ private fun QualityDialog(current: Quality, onDismiss: () -> Unit, onSave: (Qual
             Text("分辨率上限", style=MaterialTheme.typography.titleSmall)
             Row(Modifier.horizontalScroll(rememberScrollState())) {
                 listOf(1280 to 720,1920 to 1080,2560 to 1440,3840 to 2160).forEach { (w,h) ->
-                    TextButton(onClick={longEdge=w.toString();shortEdge=h.toString()}) { Text(if(h==2160) "4K" else "${h}p") }
+                    TextButton(onClick={longEdge=w.toString();shortEdge=h.toString();resolutionLocked=true}) { Text(if(h==2160) "4K" else "${h}p") }
                 }
             }
             Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(longEdge,{longEdge=it},Modifier.weight(1f),label={Text("长边像素")},singleLine=true,keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Number))
-                OutlinedTextField(shortEdge,{shortEdge=it},Modifier.weight(1f),label={Text("短边像素")},singleLine=true,keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Number))
+                OutlinedTextField(longEdge,{longEdge=it;resolutionLocked=true},Modifier.weight(1f),label={Text("长边像素")},singleLine=true,keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Number))
+                OutlinedTextField(shortEdge,{shortEdge=it;resolutionLocked=true},Modifier.weight(1f),label={Text("短边像素")},singleLine=true,keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Number))
             }
-            OutlinedTextField(fps,{fps=it},Modifier.fillMaxWidth(),label={Text("目标帧率：1–60 FPS")},singleLine=true,keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Number))
+            OutlinedTextField(fps,{fps=it;fpsLocked=true},Modifier.fillMaxWidth(),label={Text("目标帧率：1–60 FPS")},singleLine=true,keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Number))
             Row(Modifier.horizontalScroll(rememberScrollState())) {
-                listOf(15,24,30,60).forEach { value -> TextButton(onClick={fps=value.toString()}) { Text("${value} 帧") } }
+                listOf(15,24,30,60).forEach { value -> TextButton(onClick={fps=value.toString();fpsLocked=true}) { Text("${value} 帧") } }
             }
             OutlinedTextField(mbps,{mbps=it},Modifier.fillMaxWidth(),label={Text("码率上限：0.5–80 Mbps")},singleLine=true,keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Decimal))
-            Text("资源不足时",style=MaterialTheme.typography.titleSmall)
+            Row(verticalAlignment=Alignment.CenterVertically) {
+                Checkbox(checked=resolutionLocked,onCheckedChange={resolutionLocked=it})
+                TextButton(onClick={resolutionLocked=!resolutionLocked}) { Text("锁定分辨率") }
+            }
+            Row(verticalAlignment=Alignment.CenterVertically) {
+                Checkbox(checked=fpsLocked,onCheckedChange={fpsLocked=it})
+                TextButton(onClick={fpsLocked=!fpsLocked}) { Text("锁定帧率目标") }
+            }
+            Text(if (resolutionLocked || fpsLocked) "手动锁定优先；取消锁定才允许自动调整该项" else "未锁定参数的自动策略",style=MaterialTheme.typography.bodySmall)
             VideoPriority.entries.forEach { option ->
                 Row(verticalAlignment=Alignment.CenterVertically) {
-                    RadioButton(selected=priority==option,onClick={priority=option})
-                    TextButton(onClick={priority=option}) { Text(option.label) }
+                    RadioButton(selected=priority==option,onClick={priority=option},enabled=!resolutionLocked && !fpsLocked)
+                    TextButton(onClick={priority=option},enabled=!resolutionLocked && !fpsLocked) { Text(option.label) }
                 }
             }
-            Text("尺寸按屏幕比例适配竖屏，不放大低分辨率源。参数为目标上限，4K / 60 帧受屏幕、编码器、网络限制；静止画面可能降低帧率，实际发送和接收数据见通话页。清晰优先允许降帧，帧率优先允许降分辨率；拥塞控制始终生效。",style=MaterialTheme.typography.bodySmall)
+            Text("尺寸按屏幕比例适配竖屏，不放大低分辨率源。参数为目标上限，4K / 60 帧受屏幕、编码器、网络限制；静止画面可能降低帧率，实际发送和接收数据见通话页。锁定项不主动降档，但不能保证设备与网络始终达到目标；码率仍是上限，拥塞控制始终生效。",style=MaterialTheme.typography.bodySmall)
         }
     }, confirmButton={ TextButton(onClick={
         try {
             val rate=mbps.toDoubleOrNull()
             require(rate!=null && rate.isFinite() && rate in 0.5..80.0) { "码率上限需为 0.5–80 Mbps" }
-            onSave(Quality(longEdge.toIntOrNull() ?: 0,shortEdge.toIntOrNull() ?: 0,fps.toIntOrNull() ?: 0,(rate*1_000_000).toInt(),priority))
+            onSave(Quality(longEdge.toIntOrNull() ?: 0,shortEdge.toIntOrNull() ?: 0,fps.toIntOrNull() ?: 0,(rate*1_000_000).toInt(),priority,resolutionLocked,fpsLocked))
         } catch(e: IllegalArgumentException) { error=e.message }
     }) {Text("应用")} },dismissButton={TextButton(onClick=onDismiss){Text("取消")}})
 }

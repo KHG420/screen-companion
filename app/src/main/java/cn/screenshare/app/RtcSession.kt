@@ -400,13 +400,14 @@ class RtcSession(
         videoSource?.setIsScreencast(quality.detailContent)
         val sender = videoSender ?: return
         val p = sender.parameters
-        p.degradationPreference = when (quality.priority) {
-            VideoPriority.BALANCED -> RtpParameters.DegradationPreference.BALANCED
-            VideoPriority.RESOLUTION -> RtpParameters.DegradationPreference.MAINTAIN_RESOLUTION
-            VideoPriority.FRAMERATE -> RtpParameters.DegradationPreference.MAINTAIN_FRAMERATE
-        }
+        p.degradationPreference = quality.degradationPreference
         p.encodings.forEach { it.maxBitrateBps = quality.bitrate; it.maxFramerate = quality.fps }
-        if (p.encodings.isNotEmpty()) check(sender.setParameters(p)) { "编码器不支持此参数组合" }
+        if (p.encodings.isNotEmpty()) {
+            check(sender.setParameters(p)) { "编码器不支持此参数组合" }
+            if (quality.resolutionLocked || quality.fpsLocked)
+                check(sender.parameters.degradationPreference == quality.degradationPreference) { "编码器未接受手动锁定策略" }
+            if (BuildConfig.DEBUG) android.util.Log.d("QualityControl", "policy=${sender.parameters.degradationPreference} size=${quality.longEdge}x${quality.shortEdge} fps=${quality.fps} resolutionLocked=${quality.resolutionLocked} fpsLocked=${quality.fpsLocked}")
+        }
     }
     fun stopScreen() {
         stopPlaybackAudio()
@@ -469,6 +470,13 @@ class RtcSession(
                     }
                     lines += "${if(sending) "发送" else "接收"} ${width}×${height} · ${rate}${reason}"
                     if (timing.isNotEmpty()) lines += timing.joinToString(" · ")
+                    if (sending && quality.resolutionLocked) {
+                        val (cw, ch) = captureSize()
+                        if (maxOf(width,height) < maxOf(cw,ch) || minOf(width,height) < minOf(cw,ch))
+                            lines += "实际发送尺寸低于锁定目标；请检查设备能力与网络，设置未被改写"
+                    }
+                    if (sending && quality.fpsLocked && fresh && (frames-old!!.frames)/elapsed < quality.fps * .85)
+                        lines += "实际帧率低于锁定目标；静止画面、采集、设备或网络可能限制出帧，设置未被改写"
                 }
             }
             if (capturer != null) {

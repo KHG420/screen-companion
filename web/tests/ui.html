@@ -25,7 +25,7 @@
 <div class="controls"><div class="control-group"><button id="share" class="primary" disabled>共享我的屏幕</button><button id="mute" aria-pressed="true">开启麦克风</button><button id="camera" aria-pressed="false" disabled>开启摄像头</button><button id="chat-toggle" aria-expanded="false" aria-controls="chat-panel">聊天</button></div><div class="control-group"><button id="settings-toggle" aria-expanded="false" aria-controls="quality-details">画质与声音</button><button id="hangup" class="danger">结束通话</button></div></div>
 <p id="mic-status" class="hint" role="status" hidden></p>
 <details id="quality-details"><summary>画质、声音与连接详情</summary>
-<div class="control-group"><label for="quality">画质预设</label><select id="quality"><option value="auto">均衡 · 1080p / 30 帧</option><option value="clear">文字 · 1440p / 24 帧</option><option value="smooth">动态 · 1080p / 60 帧</option><option value="uhd">4K · 2160p / 30 帧</option><option value="uhd60">4K · 2160p / 60 帧</option><option value="custom" disabled>自定义</option></select><button id="system-mute" aria-pressed="false" hidden>关闭共享声音</button><button id="camera-preview" aria-pressed="false" hidden>收起摄像头画面</button></div>
+<div class="control-group"><label for="quality">画质预设</label><select id="quality"><option value="hd">高清默认 · 1440p / 30 帧</option><option value="auto">均衡 · 1080p / 30 帧</option><option value="clear">文字 · 1440p / 24 帧</option><option value="smooth">动态 · 1080p / 60 帧</option><option value="uhd">4K · 2160p / 30 帧</option><option value="uhd60">4K · 2160p / 60 帧</option><option value="custom" disabled>自定义</option></select><button id="system-mute" aria-pressed="false" hidden>关闭共享声音</button><button id="camera-preview" aria-pressed="false" hidden>收起摄像头画面</button></div>
 <form id="quality-form">
 <p class="hint">调整自己共享的画面；分辨率、帧率、码率独立设置。按比例适配竖屏，不拉伸或放大低分辨率源。</p>
 <div class="quality-fields">
@@ -34,11 +34,11 @@
 <div><label for="short-edge">短边上限（像素）</label><input id="short-edge" type="number" min="180" max="2160" step="2" value="1080" required></div>
 <div><label for="fps">目标帧率（1–60 FPS）</label><input id="fps" type="number" min="1" max="60" step="1" list="fps-options" value="30" required><datalist id="fps-options"><option value="15"><option value="24"><option value="30"><option value="60"></datalist></div>
 <div><label for="bitrate">码率上限（0.5–80 Mbps）</label><input id="bitrate" type="number" min="0.5" max="80" step="0.1" value="8" required></div>
-<div><label for="priority">资源不足时</label><select id="priority"><option value="balanced">自动平衡</option><option value="maintain-resolution">清晰优先 · 允许降帧</option><option value="maintain-framerate">帧率优先 · 允许降清晰度</option></select></div>
-</div><button id="apply-quality" type="submit">应用画质</button><p id="quality-result" role="status"></p>
+<div><label for="priority">未锁定参数的自动策略</label><select id="priority"><option value="balanced">自动平衡</option><option value="maintain-resolution">清晰优先 · 允许降帧</option><option value="maintain-framerate">帧率优先 · 允许降清晰度</option></select></div>
+</div><div class="quality-locks"><label><input id="lock-resolution" type="checkbox" checked>锁定分辨率</label><label><input id="lock-fps" type="checkbox">锁定帧率目标</label></div><p id="lock-note" class="hint" role="status">手动修改尺寸或帧率会锁定该项；预设重新填写参数与锁定状态。</p><button id="apply-quality" type="submit">应用画质</button><p id="quality-result" role="status"></p>
 </form>
 <p id="quality-target" class="hint"></p><p id="media-stats" class="hint"></p><p id="quality-note" class="hint"></p>
-<p class="hint">参数为目标上限，实际能力取决于共享源、编码器和网络。4K / 60 FPS 不保证同时达到；静止画面可能降低发送帧率。无法完全关闭 WebRTC 拥塞控制。</p>
+<p class="hint">参数为目标上限，实际能力取决于共享源、编码器和网络。4K / 60 FPS 不保证同时达到；静止画面可能降低发送帧率。锁定项不主动降档，码率仍是上限，拥塞控制始终生效。浏览器不支持锁定时会明确报错，不会偷偷改用其他策略。</p>
 <p id="share-hint" class="hint">共享声音：优先使用 Chrome / Edge，选择标签页并勾选“同时分享音频”。其他共享方式取决于浏览器和系统。</p>
 </details>
 </section>
