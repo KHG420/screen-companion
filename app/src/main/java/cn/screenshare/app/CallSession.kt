@@ -51,7 +51,9 @@ class CallSession(private val service: CallService, private val state: MutableSt
     fun start(server: String, room: String?) {
         if (started) return
         started = true
-        state.value = CallState(active = true, status = if (room == null) "正在创建房间" else "正在加入房间")
+        val microphoneAllowed = service.checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+        state.value = CallState(active = true, muted = !microphoneAllowed, microphoneAvailable = microphoneAllowed,
+            status = if (room == null) "正在创建房间" else "正在加入房间")
         scope.launch {
             try {
                 val api = Signaling(ServerAddress.normalize(server, BuildConfig.DEBUG)).also { signaling = it }
@@ -62,14 +64,15 @@ class CallSession(private val service: CallService, private val state: MutableSt
                     { track -> state.update { it.copy(remoteCamera = track) } },
                     { message -> state.update {
                         if (message.optString("type") == "camera") it.copy(remoteCameraOn = message.getBoolean("enabled"))
-                        else it.copy(chatMessages = (it.chatMessages + ChatMessage(message.getString("text"), false)).takeLast(200))
+                        else it.copy(chatMessages = (it.chatMessages + ChatMessage(message.getString("text"), false)).takeLast(200), chatRevision = it.chatRevision + 1, chatUnread = it.chatUnread + 1)
                     } },
                     { ready -> state.update { it.copy(chatReady = ready, remoteCameraOn = ready && it.remoteCameraOn) } },
                     { error -> stopCamera(); state.update { it.copy(error = error) } },
                     ::connectionChanged,
                     { stopSharing() },
-                    { state.update { it.copy(error = "系统声音采集中断，请停止共享后重新开始。语音和画面仍可使用。") } })
-                rtc?.microphone(hasAudioFocus)
+                    { state.update { it.copy(systemAudio = false, error = "系统声音采集中断，请停止共享后重新开始。语音和画面仍可使用。") } },
+                    { rtc?.recording(false); state.update { it.copy(muted = true, microphoneAvailable = false, systemAudio = false, notice = "音频采集暂不可用，画面和聊天继续。点击重试麦克风恢复；共享声音需重新开始共享。") } })
+                rtc?.microphone(hasAudioFocus && !state.value.muted)
                 state.update { it.copy(roomId = credentials.roomId, role = credentials.role, hasTurn = credentials.hasTurn,
                     peerPresent = credentials.role == "guest", status = if (credentials.role == "host") "等待对方加入" else "正在连接语音") }
                 launch { sendLoop(api) }
@@ -161,7 +164,8 @@ class CallSession(private val service: CallService, private val state: MutableSt
                 signaling?.share(true); reserved = true
                 service.foreground(true)
                 checkNotNull(rtc).startScreen(data, state.value.quality)
-                state.update { it.copy(sharing = true, shareBusy = false) }
+                rtc?.systemMuted(false)
+                state.update { it.copy(sharing = true, shareBusy = false, systemAudio = rtc?.hasSystemAudio() == true, systemMuted = false) }
             } catch (e: CancellationException) { throw e }
             catch (e: Exception) {
                 runCatching { rtc?.stopScreen() }; service.foreground(false)
@@ -175,7 +179,7 @@ class CallSession(private val service: CallService, private val state: MutableSt
         sharingWork?.cancel()
         runCatching { rtc?.stopScreen() }
         service.foreground(false)
-        state.update { it.copy(sharing = false, shareBusy = true) }
+        state.update { it.copy(sharing = false, shareBusy = true, systemAudio = false) }
         sharingWork = scope.launch {
             try { signaling?.share(false); state.update { it.copy(shareBusy = false) } }
             catch (e: CancellationException) { throw e }
@@ -208,14 +212,47 @@ class CallSession(private val service: CallService, private val state: MutableSt
         return try {
             val text = value.trim()
             checkNotNull(rtc).sendChat(text)
-            state.update { it.copy(chatMessages = (it.chatMessages + ChatMessage(text, true)).takeLast(200), error = null) }
+            state.update { it.copy(chatMessages = (it.chatMessages + ChatMessage(text, true)).takeLast(200), chatRevision = it.chatRevision + 1, error = null) }
             true
         } catch (e: Exception) { state.update { it.copy(error = e.message ?: "消息未发送，请重试") }; false }
     }
-    fun toggleMute() { state.update { it.copy(muted = !it.muted) }; rtc?.microphone(hasAudioFocus && !state.value.muted) }
+    fun readChat() { state.update { it.copy(chatUnread = 0) } }
+    fun toggleMute() {
+        if (ending) return
+        if (!state.value.microphoneAvailable) {
+            if (service.checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) return
+            service.foreground(state.value.sharing)
+            rtc?.recording(false)
+            rtc?.recording(true)
+            scope.launch {
+                try { rtc?.updateAudioDirection() }
+                catch (e: CancellationException) { throw e }
+                catch (_: Exception) { state.update { it.copy(muted = true, microphoneAvailable = false, error = "麦克风连接未恢复，请重试") } }
+            }
+            state.update { it.copy(muted = false, microphoneAvailable = true, notice = null) }
+        } else state.update { it.copy(muted = !it.muted) }
+        rtc?.microphone(hasAudioFocus && !state.value.muted)
+    }
+    fun prepareSharingAudio() {
+        if (ending || service.checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) return
+        service.foreground(state.value.sharing)
+        rtc?.microphone(hasAudioFocus && !state.value.muted)
+        rtc?.recording(true)
+        scope.launch {
+            try { rtc?.updateAudioDirection() }
+            catch (e: CancellationException) { throw e }
+            catch (_: Exception) { state.update { it.copy(error = "共享声音连接未恢复，请重新共享") } }
+        }
+        state.update { it.copy(microphoneAvailable = true) }
+    }
+    fun toggleSystemAudio() {
+        if (ending || !state.value.systemAudio) return
+        state.update { it.copy(systemMuted = !it.systemMuted) }
+        rtc?.systemMuted(state.value.systemMuted)
+    }
     fun quality(value: Quality) {
         if (ending || state.value.shareBusy) return
-        try { rtc?.setQuality(value); state.update { it.copy(quality = value, error = null) } }
+        try { rtc?.setQuality(value); state.update { it.copy(quality = value, error = null, notice = if (it.sharing) "目标画质已应用，实际效果可在连接详情中查看" else null) } }
         catch (e: Exception) { state.update { it.copy(error = e.message ?: "无法调整画质，请降低参数重试") } }
     }
     fun dismissError() { state.update { it.copy(error = null) } }
@@ -240,7 +277,7 @@ class CallSession(private val service: CallService, private val state: MutableSt
         } catch (_: SecurityException) { state.update { it.copy(error = "未获得蓝牙权限，请在系统设置中开启附近设备权限") } }
     }
     @Suppress("DEPRECATION")
-    private fun refreshRoutes() {
+    fun refreshRoutes() {
         if (ending) return
         val routes = if (Build.VERSION.SDK_INT >= 31) {
             audio.availableCommunicationDevices.filter { it.type != AudioDeviceInfo.TYPE_BLUETOOTH_SCO || service.checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED }

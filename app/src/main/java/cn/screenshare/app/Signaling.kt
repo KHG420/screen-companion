@@ -13,6 +13,14 @@ class ApiException(val status: Int, message: String) : IOException(message)
 data class RoomCredentials(val roomId: String, val role: String, val token: String, val iceServers: List<org.webrtc.PeerConnection.IceServer>, val hasTurn: Boolean)
 
 object ServerAddress {
+    fun invitation(input: String, allowHttp: Boolean): Pair<String, String> {
+        val uri = try { URI(input.trim()) } catch (_: Exception) { throw IllegalArgumentException("请输入完整的邀请链接") }
+        require(uri.host != null && uri.userInfo == null && uri.query == null && uri.path.orEmpty() in listOf("", "/", "/screenshare", "/screenshare/")) { "邀请链接应指向同屏首页" }
+        val room = uri.fragment.orEmpty().removePrefix("room=")
+        require(uri.fragment == "room=$room" && room.matches(Regex("[0-9]{8}"))) { "邀请链接缺少有效的 8 位房间号" }
+        val address = normalize(URI(uri.scheme, null, uri.host, uri.port, null, null, null).toString(), allowHttp)
+        return address to room
+    }
     fun normalize(input: String, allowHttp: Boolean): String {
         val uri = try { URI(input.trim().trimEnd('/')) } catch (_: Exception) { throw IllegalArgumentException("请输入有效的服务器地址") }
         require(uri.host != null && uri.userInfo == null && uri.query == null && uri.fragment == null && uri.path.orEmpty().isEmpty()) { "服务器地址应为 https://域名，不包含路径或账号" }

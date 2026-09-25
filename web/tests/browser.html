@@ -50,7 +50,7 @@ document.querySelector('#pair').onclick=async()=>{
  const record=(name,ok,detail)=>{window.results.push({name,ok,detail});out.textContent=JSON.stringify(window.results,null,2);if(!ok)throw new Error(name);};
  try{
  h=new Call('/api',s=>document.body.dataset.host=JSON.stringify({...s,remoteAudio:!!s.remoteAudio,remoteVideo:!!s.remoteVideo}));await h.start();g=new Call('/api',s=>document.body.dataset.guest=JSON.stringify({...s,remoteAudio:!!s.remoteAudio,remoteVideo:!!s.remoteVideo}));await g.start(h.state.roomId);await until(()=>h.state.connected&&g.state.connected,'connect');record('two browsers connected',true);
- await until(()=>h.state.chatReady&&g.state.chatReady,'data channel');
+ await until(()=>h.state.chatReady&&g.state.chatReady&&h.state.micAvailable&&g.state.micAvailable,'data channel and microphones');
  h.sendChat('你好，小狗 🐶');g.sendChat('<img src=x onerror=alert(1)>');
  await until(()=>h.state.messages.length===2&&g.state.messages.length===2,'chat messages');record('bidirectional Unicode text via data channel',g.state.messages.some(m=>m.text==='你好，小狗 🐶'&&!m.mine));
  await h.toggleCamera();await g.toggleCamera();
@@ -69,13 +69,26 @@ document.querySelector('#pair').onclick=async()=>{
  record('live independent 720p 20fps 2.5Mbps',h.video.sender.getParameters().encodings[0].maxFramerate===20&&h.state.quality.bitrate===2_500_000,await window.sample(g));
  await h.quality({...qualities.uhd,fps:15});
  await until(async()=>(await window.sample(g)).some(x=>x.frameWidth===3840&&x.frameHeight===2160),'restore 4K');record('live restore 4K',true);
+ const originalPeer=h.pc, originalAudio=h.mix.stream.getAudioTracks()[0];
+ const disconnectedMic=h.mic.getAudioTracks()[0];disconnectedMic.stop();disconnectedMic.dispatchEvent(new Event('ended'));
+ record('microphone loss preserves screen, room and mixed track',!h.closed&&h.state.connected&&h.state.sharing&&!h.state.micAvailable&&h.pc===originalPeer&&h.mix.stream.getAudioTracks()[0]===originalAudio);
+ await h.mute();record('microphone recovery needs no renegotiation',h.state.micAvailable&&!h.state.muted&&h.pc===originalPeer&&h.mix.stream.getAudioTracks()[0]===originalAudio);
  h.mute();await wait(600);const mixed=await rms(g.state.remoteAudio);record('screen sound continues with mic muted',mixed>.01,mixed);
+ h.muteSystemAudio();await wait(2500);record('independent shared-audio mute',await rms(g.state.remoteAudio)<.005&&h.state.sharing);
+ h.muteSystemAudio();await wait(600);record('shared audio resumes without capture restart',await rms(g.state.remoteAudio)>.01&&h.state.muted);
  await h.stopSharing();await wait(2500);const silence=await rms(g.state.remoteAudio);record('stop share removes screen audio while mic muted',silence<.005,silence);
  h.mute();await wait(500);const mic=await rms(g.state.remoteAudio);record('mic can resume after sharing',mic>.01,mic);
  await until(()=>!g.state.remoteSharing,'release lock');await g.share();await until(async()=>(await window.sample(h)).some(x=>x.mid===h.video.mid&&x.framesDecoded>0),'guest decode timeout');stats=await window.sample(h);record('guest video decoded using offered transceiver',stats.some(x=>x.mid==='1'&&x.framesDecoded>0),stats);
  await g.stopSharing();await until(()=>!h.state.remoteSharing,'release guest');await h.share();await wait(1000);record('restart sharing works',h.state.sharing&&g.state.remoteSharing);
  await h.offer(true);await wait(2000);record('ICE restart preserves connection',h.state.connected&&g.state.connected);
  const finalCameraTracks=[h.state.localCamera,g.state.localCamera];h.end();await until(()=>g.closed,'peer end');record('hangup ends peer and media',h.closed&&g.closed&&h.mic.getTracks().every(t=>t.readyState==='ended')&&finalCameraTracks.every(t=>t.readyState==='ended'));
+ const captureMic=navigator.mediaDevices.getUserMedia;
+ navigator.mediaDevices.getUserMedia=async()=>{throw new DOMException('test denial','NotAllowedError');};
+ h=new Call('/api');await h.start();g=new Call('/api');await g.start(h.state.roomId);
+ await until(()=>h.state.connected&&g.state.connected&&h.state.chatReady&&g.state.chatReady,'receive-only connection');
+ h.sendChat('receive-only');await until(()=>g.state.messages.length===1,'receive-only chat');
+ record('denied microphones still allow joining and chat',!h.state.micAvailable&&!g.state.micAvailable&&!h.closed&&!g.closed);
+ navigator.mediaDevices.getUserMedia=captureMic;
  document.body.dataset.done='true';window.done=true;
  }catch(e){window.testError=e.message;document.body.dataset.done='true';window.done=true;out.textContent=JSON.stringify({error:e.message,results:window.results,host:h?.state,guest:g?.state,hs:h?.pc?.connectionState,gs:g?.pc?.connectionState,hostStats:h?.closed?null:await window.sample(h),guestStats:g?.closed?null:await window.sample(g)},null,2);}finally{h?.end();g?.end();players.forEach(p=>{p.pause();p.srcObject=null});sources.forEach(s=>{try{s.stop();}catch{}});timers.forEach(clearInterval);}
 };

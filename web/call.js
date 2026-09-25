@@ -57,7 +57,7 @@ export function friendly(error) {
 export class Call {
   constructor(base, changed = () => {}) {
     this.base = base.replace(/\/$/, ''); this.changed = changed;
-    this.state = { status: '正在连接', connected: false, sharing: false, remoteSharing: false, muted: false, cameraOn: false, cameraBusy: false, remoteCameraOn: false, chatReady: false, messages: [], busy: false, quality: { ...qualities.auto }, qualityBusy: false };
+    this.state = { status: '正在连接', connected: false, sharing: false, remoteSharing: false, muted: true, micAvailable: false, micBusy: false, micIssue: '', systemMuted: false, cameraOn: false, cameraBusy: false, remoteCameraOn: false, chatReady: false, messages: [], busy: false, quality: { ...qualities.auto }, qualityBusy: false };
     this.abort = new AbortController(); this.pendingIce = []; this.sendChain = Promise.resolve(); this.closed = false;
     this.videoSamples = new Map(); this.statsTimer = null; this.connectionTimer = null; this.reconnectTimer = null;
   }
@@ -81,15 +81,14 @@ export class Call {
   async start(room) {
     // Construct/resume inside the click handler so Web Audio is user-activated.
     this.audio = new AudioContext();
-    await this.audio.resume();
+    // Some browsers leave resume pending until a later gesture. Room entry must
+    // still work; the explicit playback/microphone action can activate audio.
+    this.audio.resume().catch(() => {});
     try {
-      const mic = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }, video: false });
-      if (this.closed) { mic.getTracks().forEach(t => t.stop()); return; }
-      this.mic = mic;
+      if (this.closed) return;
       this.mix = this.audio.createMediaStreamDestination();
-      this.micSource = this.audio.createMediaStreamSource(mic); this.micGain = this.audio.createGain();
-      this.micSource.connect(this.micGain).connect(this.mix);
-      mic.getAudioTracks()[0].onended = () => this.fail('麦克风已断开，请连接设备后重新加入。');
+      // Permission prompts and missing microphones must not block joining or receiving.
+      this.enableMicrophone();
       this.credentials = await this.request('POST', room ? `/v1/rooms/${room}/join` : '/v1/rooms', {});
       if (this.closed) return;
       this.pc = new RTCPeerConnection({ iceServers: this.credentials.iceServers, iceTransportPolicy: 'all' });
@@ -298,7 +297,42 @@ export class Call {
       this.update({cameraOn:false,localCamera:null}); this.sendCameraState();
     }
   }
-  mute() { this.update({ muted: !this.state.muted }); this.micGain.gain.value = this.state.muted ? 0 : 1; }
+  async enableMicrophone() {
+    if (this.closed || this.state.micBusy) return;
+    this.update({micBusy:true, micIssue:''});
+    let mic;
+    try {
+      mic = await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true},video:false});
+      if (this.closed) { mic.getTracks().forEach(t=>t.stop()); return; }
+      const track = mic.getAudioTracks()[0];
+      if (!track || track.readyState === 'ended') throw new Error('麦克风不可用');
+      await this.audio.resume();
+      if (this.closed) { mic.getTracks().forEach(t=>t.stop()); return; }
+      this.micSource?.disconnect(); this.micGain?.disconnect();
+      this.mic?.getTracks().forEach(t=>{t.onended=null;t.stop();});
+      this.mic=mic; this.micSource=this.audio.createMediaStreamSource(mic); this.micGain=this.audio.createGain();
+      this.micSource.connect(this.micGain).connect(this.mix);
+      track.onended=()=>{
+        if (this.closed || this.mic !== mic) return;
+        this.micSource.disconnect(); this.micGain.disconnect();
+        this.update({micAvailable:false,muted:true,micIssue:'麦克风已断开，画面和聊天继续。连接设备后，点击“重试麦克风”。'});
+      };
+      this.update({micAvailable:true,muted:false,micIssue:''});
+    } catch (error) {
+      mic?.getTracks().forEach(t=>t.stop());
+      this.update({micAvailable:false,muted:true,micIssue:'暂未开启麦克风，你仍可观看、听声音和聊天。'+friendly(error)});
+    } finally { this.update({micBusy:false}); }
+  }
+  mute() {
+    if (this.closed || this.state.micBusy) return;
+    if (!this.state.micAvailable) return this.enableMicrophone();
+    this.update({ muted: !this.state.muted }); this.micGain.gain.value = this.state.muted ? 0 : 1;
+  }
+  muteSystemAudio() {
+    if (!this.displayGain || !this.state.systemAudio) return;
+    this.update({systemMuted:!this.state.systemMuted});
+    this.displayGain.gain.value=this.state.systemMuted?0:1;
+  }
   async quality(value) {
     const q = validateQuality(typeof value === 'string' ? qualities[value] : value);
     if (this.closed || this.state.busy || this.state.qualityBusy) throw new Error('共享状态正在变化，请稍后调整。');
@@ -363,9 +397,13 @@ export class Call {
       if (track.readyState === 'ended') throw new Error('屏幕共享已取消，请重新选择。');
       await this.video.sender.replaceTrack(track);
       const sound = capture.getAudioTracks();
-      if (sound.length) { this.displaySource = this.audio.createMediaStreamSource(new MediaStream(sound)); this.displaySource.connect(this.mix); }
+      if (sound.length) {
+        this.displaySource = this.audio.createMediaStreamSource(new MediaStream(sound));
+        this.displayGain = this.audio.createGain(); this.displaySource.connect(this.displayGain).connect(this.mix);
+        sound[0].onended = () => this.update({systemAudio:false});
+      }
       track.onended = () => this.stopSharing();
-      this.update({ sharing: true, localVideo: track, systemAudio: sound.length > 0, busy: false, qualityNote:this.captureNote(this.state.quality) });
+      this.update({ sharing: true, localVideo: track, systemAudio: sound.length > 0, systemMuted:false, busy: false, qualityNote:this.captureNote(this.state.quality) });
     } catch (error) {
       capture?.getTracks().forEach(t => t.stop()); this.stopCapture();
       if (!this.closed && reserved) {
@@ -377,6 +415,7 @@ export class Call {
   }
   stopCapture() {
     this.displaySource?.disconnect(); this.displaySource = null;
+    this.displayGain?.disconnect(); this.displayGain = null;
     this.display?.getTracks().forEach(t => { t.onended = null; t.stop(); }); this.display = null;
     if (!this.closed && this.video) this.video.sender.replaceTrack(null).catch(() => {});
   }

@@ -38,6 +38,7 @@ class RtcSession(
     private val connectionChanged: (PeerConnection.PeerConnectionState) -> Unit,
     private val projectionStopped: () -> Unit,
     private val playbackFailed: () -> Unit,
+    private val microphoneFailed: () -> Unit,
 ) {
     val egl: EglBase = EglBase.create()
     private val handler = Handler(Looper.getMainLooper())
@@ -47,6 +48,9 @@ class RtcSession(
     private val audioSource: AudioSource
     private val audioTrack: AudioTrack
     private val peer: PeerConnection
+    private var audioSender: RtpSender? = null
+    private var audioTransceiver: RtpTransceiver? = null
+    private var recordingAllowed = context.checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_GRANTED
     private var videoSender: RtpSender? = null
     private var cameraSender: RtpSender? = null
     private var screenMid: String? = null
@@ -65,6 +69,7 @@ class RtcSession(
     private val playbackLock = Any()
     private var playbackRecord: AudioRecord? = null
     private val playbackSamples = ShortArray(480) // 10 ms at the ADM input rate.
+    @Volatile private var playbackMuted = false
     private var quality = Quality.AUTO
     private data class VideoSample(val time: Double, val bytes: Long, val frames: Long, val counters: Map<String, Double>)
     private val videoSamples = mutableMapOf<String, VideoSample>()
@@ -80,13 +85,18 @@ class RtcSession(
     init {
         PeerConnectionFactory.initialize(PeerConnectionFactory.InitializationOptions.builder(context).createInitializationOptions())
         audioModule = JavaAudioDeviceModule.builder(context)
+            .setAudioRecordErrorCallback(object : JavaAudioDeviceModule.AudioRecordErrorCallback {
+                override fun onWebRtcAudioRecordInitError(error: String) = onMain(microphoneFailed)
+                override fun onWebRtcAudioRecordStartError(code: JavaAudioDeviceModule.AudioRecordStartErrorCode, error: String) = onMain(microphoneFailed)
+                override fun onWebRtcAudioRecordError(error: String) = onMain(microphoneFailed)
+            })
             .setInputSampleRate(48_000)
             .setAudioBufferCallback { buffer, format, channels, rate, _, timestamp ->
                 if (format == AudioFormat.ENCODING_PCM_16BIT && channels == 1 && rate == 48_000) {
                     synchronized(playbackLock) {
                         playbackRecord?.let { record ->
                             val count = record.read(playbackSamples, 0, min(playbackSamples.size, buffer.capacity() / 2), AudioRecord.READ_NON_BLOCKING)
-                            if (count > 0) mixPlaybackPcm(buffer, playbackSamples, count)
+                            if (count > 0 && !playbackMuted) mixPlaybackPcm(buffer, playbackSamples, count)
                             else if (count < 0) {
                                 stopPlaybackAudio()
                                 onMain(playbackFailed)
@@ -126,7 +136,12 @@ class RtcSession(
             optional.add(MediaConstraints.KeyValuePair("googAutoGainControl", "false"))
         })
         audioTrack = factory.createAudioTrack("microphone", audioSource)
-        peer.addTrack(audioTrack, listOf("call"))
+        // A sendrecv audio channel initializes AudioRecord even without a source.
+        // Receive-only is required until Android grants recording permission.
+        audioTransceiver = peer.addTransceiver(MediaStreamTrack.MediaType.MEDIA_TYPE_AUDIO,
+            RtpTransceiver.RtpTransceiverInit(if (recordingAllowed) RtpTransceiver.RtpTransceiverDirection.SEND_RECV else RtpTransceiver.RtpTransceiverDirection.RECV_ONLY, listOf("call")))
+        audioSender = audioTransceiver?.sender
+        if (recordingAllowed) audioSender?.setTrack(audioTrack, false)
         if (isHost) {
             configureVideo(peer.addTransceiver(MediaStreamTrack.MediaType.MEDIA_TYPE_VIDEO, RtpTransceiver.RtpTransceiverInit(RtpTransceiver.RtpTransceiverDirection.SEND_RECV)))
             cameraSender = peer.addTransceiver(MediaStreamTrack.MediaType.MEDIA_TYPE_VIDEO, RtpTransceiver.RtpTransceiverInit(RtpTransceiver.RtpTransceiverDirection.SEND_RECV)).sender
@@ -165,7 +180,11 @@ class RtcSession(
     private fun bindVideoSlots() {
         // libwebrtc disposes previous Java transceiver/sender/receiver wrappers on
         // getTransceivers(). Read once and refresh ALL retained references together.
-        val videos = peer.transceivers.filter { it.mediaType == MediaStreamTrack.MediaType.MEDIA_TYPE_VIDEO }
+        val transceivers = peer.transceivers
+        audioTransceiver = transceivers.firstOrNull { it.mediaType == MediaStreamTrack.MediaType.MEDIA_TYPE_AUDIO }
+        audioTransceiver?.direction = if (recordingAllowed) RtpTransceiver.RtpTransceiverDirection.SEND_RECV else RtpTransceiver.RtpTransceiverDirection.RECV_ONLY
+        audioSender = audioTransceiver?.sender
+        val videos = transceivers.filter { it.mediaType == MediaStreamTrack.MediaType.MEDIA_TYPE_VIDEO }
         val screen = videos.first()
         configureVideo(screen)
         screenMid = screen.mid
@@ -183,6 +202,21 @@ class RtcSession(
     private fun flushIce() { pendingIce.forEach { peer.addIceCandidate(it) }; pendingIce.clear() }
     // Mute the microphone before mixing, so shared media remains audible.
     fun microphone(enabled: Boolean) { if (!disposed) audioModule.setMicrophoneMute(!enabled) }
+    fun recording(enabled: Boolean) {
+        if (!disposed) {
+            recordingAllowed = enabled
+            audioTransceiver?.direction = if (enabled) RtpTransceiver.RtpTransceiverDirection.SEND_RECV else RtpTransceiver.RtpTransceiverDirection.RECV_ONLY
+            audioSender?.setTrack(if (enabled) audioTrack else null, false)
+            peer.setAudioRecording(enabled)
+        }
+    }
+    suspend fun updateAudioDirection() {
+        while (!disposed && peer.signalingState() != PeerConnection.SignalingState.STABLE) kotlinx.coroutines.delay(100)
+        if (disposed) return
+        if (isHost) offer() else signal("restart", JSONObject())
+    }
+    fun systemMuted(muted: Boolean) { playbackMuted = muted }
+    fun hasSystemAudio(): Boolean = synchronized(playbackLock) { playbackRecord != null }
 
     private fun bindChannel(value: DataChannel) {
         if (value.label() != "companion-v1" || channel != null) { value.close(); value.dispose(); return }
@@ -296,9 +330,10 @@ class RtcSession(
         applyEncoding()
         screen.startCapture(width, height, quality.fps)
         captureDimensions = width to height
-        startPlaybackAudio(checkNotNull(screen.mediaProjection))
+        if (context.checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_GRANTED)
+            runCatching { startPlaybackAudio(checkNotNull(screen.mediaProjection)) }.onFailure { onMain(playbackFailed) }
     }
-    @Suppress("MissingPermission") // RECORD_AUDIO is granted before starting the call.
+    @Suppress("MissingPermission") // The caller checks RECORD_AUDIO; denial keeps video-only sharing available.
     private fun startPlaybackAudio(projection: MediaProjection) {
         val capture = AudioPlaybackCaptureConfiguration.Builder(projection)
             .addMatchingUsage(AudioAttributes.USAGE_MEDIA)

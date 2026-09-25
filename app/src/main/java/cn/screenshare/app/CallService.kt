@@ -44,6 +44,8 @@ data class CallState(
     val remoteCameraOn: Boolean = false,
     val chatReady: Boolean = false,
     val chatMessages: List<ChatMessage> = emptyList(),
+    val chatRevision: Int = 0,
+    val chatUnread: Int = 0,
     val active: Boolean = false,
     val roomId: String = "",
     val role: String = "",
@@ -51,9 +53,12 @@ data class CallState(
     val connected: Boolean = false,
     val peerPresent: Boolean = false,
     val muted: Boolean = false,
+    val microphoneAvailable: Boolean = false,
     val sharing: Boolean = false,
     val remoteSharing: Boolean = false,
     val shareBusy: Boolean = false,
+    val systemAudio: Boolean = false,
+    val systemMuted: Boolean = false,
     val quality: Quality = Quality.AUTO,
     val error: String? = null,
     val notice: String? = null,
@@ -105,16 +110,17 @@ class CallService : Service() {
         val end = PendingIntent.getService(this, 1, Intent(this, CallService::class.java).setAction(END), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
         val notification = NotificationCompat.Builder(this, "call").setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(if (sharing) "正在共享你的屏幕" else if (camera) "摄像头视频通话进行中" else "同屏通话进行中")
-            .setContentText(if (sharing) "对方可以看到屏幕内容，点此返回控制" else if (camera) "摄像头和麦克风正在使用，点此返回控制" else "麦克风用于双方语音，点此返回通话")
+            .setContentText(if (sharing) "对方可以看到屏幕内容，点此返回控制" else if (camera) "摄像头正在使用，点此返回控制" else "点此返回画面、声音和聊天控制")
             .setContentIntent(open).setOngoing(true).setSilent(true)
             .setCategory(NotificationCompat.CATEGORY_CALL).addAction(0, "挂断", end)
         if (sharing) {
             val stop = PendingIntent.getService(this, 2, Intent(this, CallService::class.java).setAction(STOP_SHARE), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
             notification.addAction(0, "停止共享", stop)
         }
-        val microphoneType = if (Build.VERSION.SDK_INT >= 30) ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE else 0
+        val hasMicrophone = checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        val microphoneType = if (hasMicrophone && Build.VERSION.SDK_INT >= 30) ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE else 0
         val cameraType = if (camera && Build.VERSION.SDK_INT >= 30) ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA else 0
-        val type = microphoneType or cameraType or (if (sharing) ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION else 0)
+        val type = ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK or microphoneType or cameraType or (if (sharing) ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION else 0)
         startForeground(NOTIFICATION_ID, notification.build(), type)
     }
     override fun onBind(intent: Intent?): IBinder? = null

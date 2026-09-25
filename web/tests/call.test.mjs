@@ -37,7 +37,7 @@ test('ending while microphone permission is pending stops the late stream', asyn
   Object.defineProperty(globalThis,'navigator',{configurable:true,value:{mediaDevices:{getUserMedia:()=>new Promise(r=>resolveMic=r)}}});
   try {
     const call=new Call('/api',s=>changed=s);
-    const start=call.start();await Promise.resolve();
+    const start=call.enableMicrophone();
     call.end();
     resolveMic({getTracks:()=>[{stop:()=>stopped=true}]});
     await start;
@@ -181,4 +181,41 @@ test('unsupported capability probes and hangup during probing preserve call fall
     capabilities.encodingInfo=async()=>{throw Error('unsupported')};await new Call('/api').configureScreenCodecs(video);assert.equal(set,0);
     capabilities.encodingInfo=()=>new Promise(r=>resolve=r);const c=new Call('/api');const pending=c.configureScreenCodecs(video);c.end();resolve({supported:true,smooth:true});await pending;assert.equal(set,0);
   }finally{globalThis.RTCRtpSender=oldSender;if(old)Object.defineProperty(globalThis,'navigator',old);else delete globalThis.navigator;}
+});
+
+
+test('microphone denial and device loss keep the room and mixed audio track alive', async () => {
+  const old=Object.getOwnPropertyDescriptor(globalThis,'navigator');
+  const c=new Call('/api');const mix={};c.mix=mix;
+  c.pc={};c.credentials={roomId:'12345678'};c.state.connected=true;
+  const graph=()=>({gain:{value:1},connect(){return this;},disconnect(){}});
+  c.audio={resume:async()=>{},createMediaStreamSource:graph,createGain:graph};
+  let denied=true,stopped=0;
+  const track={readyState:'live',stop(){stopped++;this.readyState='ended';}};
+  Object.defineProperty(globalThis,'navigator',{configurable:true,value:{mediaDevices:{getUserMedia:async()=>{if(denied)throw Object.assign(new Error('denied'),{name:'NotAllowedError'});return {getAudioTracks:()=>[track],getTracks:()=>[track]};}}}});
+  try {
+    await c.enableMicrophone();assert.equal(c.closed,false);assert.equal(c.state.connected,true);assert.equal(c.state.muted,true);assert.match(c.state.micIssue,/仍可观看/);
+    denied=false;await c.mute();assert.equal(c.state.micAvailable,true);assert.equal(c.state.muted,false);assert.equal(c.mix,mix);
+    track.readyState='ended';track.onended();assert.equal(c.closed,false);assert.equal(c.state.muted,true);assert.equal(c.credentials.roomId,'12345678');assert.match(c.state.micIssue,/麦克风已断开/);
+    track.readyState='live';await c.mute();assert.equal(c.state.micAvailable,true);assert.equal(c.mix,mix);assert.equal(c.state.connected,true);assert.equal(stopped,1);
+  } finally {if(old)Object.defineProperty(globalThis,'navigator',old);else delete globalThis.navigator;}
+});
+
+test('system audio and microphone mute are independent', () => {
+  const c=new Call('/api');c.state.micAvailable=c.state.systemAudio=true;c.state.muted=false;
+  c.micGain={gain:{value:1}};c.displayGain={gain:{value:1}};
+  c.mute();assert.equal(c.micGain.gain.value,0);assert.equal(c.displayGain.gain.value,1);
+  c.muteSystemAudio();assert.equal(c.displayGain.gain.value,0);assert.equal(c.state.muted,true);
+  c.mute();assert.equal(c.micGain.gain.value,1);assert.equal(c.displayGain.gain.value,0);
+});
+
+test('pending browser audio activation does not block receive-only room entry', {timeout:1000}, async () => {
+  const oldAudio=globalThis.AudioContext,oldPC=globalThis.RTCPeerConnection,oldNavigator=Object.getOwnPropertyDescriptor(globalThis,'navigator');
+  const track={stop(){}};
+  globalThis.AudioContext=class {resume(){return new Promise(()=>{});} async close(){} createMediaStreamDestination(){return {stream:{getAudioTracks:()=>[track],getTracks:()=>[track]}};}};
+  globalThis.RTCPeerConnection=class {addTrack(){} close(){}};
+  Object.defineProperty(globalThis,'navigator',{configurable:true,value:{mediaDevices:{getUserMedia:async()=>{throw new Error('no microphone');}}}});
+  const c=new Call('/api');c.request=async()=>({roomId:'12345678',role:'guest',iceServers:[]});c.poll=()=>{};c.armDeadline=()=>{};
+  try {await c.start('12345678');assert.equal(c.state.roomId,'12345678');assert.equal(c.closed,false);assert.equal(c.state.muted,true);}
+  finally {c.end();globalThis.AudioContext=oldAudio;globalThis.RTCPeerConnection=oldPC;if(oldNavigator)Object.defineProperty(globalThis,'navigator',oldNavigator);else delete globalThis.navigator;}
 });

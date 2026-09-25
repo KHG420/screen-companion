@@ -4,7 +4,7 @@
 
 Two-person screen sharing, camera video calls, and text/voice chat for Android and desktop browsers. Create a room, share its eight-digit code, talk, and take turns sharing a screen. The Android client uses Kotlin and Jetpack Compose; the desktop client uses native JavaScript and WebRTC. Both use the same Go signaling service built with the standard library.
 
-Version **0.4.4** is a development and testing release. It does not include accounts, remote control, or recording storage. Screen video, microphone audio, and supported shared media audio travel over WebRTC. HTTP long polling exchanges only SDP, ICE candidates, and sharing state; the signaling server does not forward media. Devices connect directly when possible, with TURN as a fallback. High resolution and low latency are not guaranteed across physical devices and networks.
+Version **0.5.0** is a development and testing release. It does not include accounts, remote control, or recording storage. Screen video, microphone audio, and supported shared media audio travel over WebRTC. HTTP long polling exchanges only SDP, ICE candidates, and sharing state; the signaling server does not forward media. Devices connect directly when possible, with TURN as a fallback. High resolution and low latency are not guaranteed across physical devices and networks.
 
 ## Self-hosting and supported platforms
 
@@ -14,9 +14,19 @@ This repository does not provide a public test service or a preconfigured server
 - **Android:** Android 10 or later.
 - **Room model:** two participants, bidirectional voice, and one shared screen at a time. iOS and multiparty calls are outside the current scope.
 
+## 0.5.0 call experience
+
+The shared screen receives the main space. Camera previews appear only when enabled and can be hidden; chat opens as a desktop sidebar or Android bottom sheet. Incoming messages preserve your reading position and show an unread indicator. Connection statistics, audio devices, and precise quality controls are available under Quality and audio. Independent resolution, 1–60 FPS, and bitrate settings remain available.
+
+Android requests recording permission when enabling the microphone or sharing system audio. Browser microphone authorization does not block room entry. Microphone and shared-audio mute controls are independent. Denied recording permission still permits video-only sharing. Audio recovery keeps the room; Android renegotiates the audio direction on the existing connection when first enabling recording.
+
+Invitation links contain only the website address and room code, never participant credentials. A desktop link prefills the room; Android's Paste invitation link imports the service and room before you choose Join. Android generates links for the deployment template's `/screenshare/` path and accepts that path or the website root. Custom paths can continue using room codes.
+
+Android provides fullscreen, pinch zoom and pan, double-tap reset, picture-in-picture, and screen-on behavior while watching. Desktop provides fullscreen and, where supported, video picture-in-picture and a screen wake lock. Platform denials leave the call usable. First-frame feedback comes from rendering callbacks; static content is not classified as a disconnection merely because its frame rate is low.
+
 ## Camera video and text chat
 
-After joining a call, choose **开启摄像头** (Enable camera) or use the chat panel. Camera permission is requested only when enabling video. Either participant can turn their camera off independently; Android also supports switching front/back cameras. Both cameras and one shared screen can run together.
+After joining a call, choose **摄像头** (Camera) or use the chat panel. Camera permission is requested only when enabling video. Either participant can turn their camera off independently; Android also supports switching front/back cameras. Both cameras and one shared screen can run together.
 
 Camera video targets up to 720p / 30 FPS / 2 Mbps, subject to device and network capacity. The existing 4K and precise quality controls apply to **screen sharing**, independently of the camera. On Android, an enabled camera can remain active when switching apps, with a foreground notification; turn it off or hang up to stop capture.
 
@@ -39,7 +49,7 @@ For Android LAN testing, connect both devices and the computer to the same trust
 
 1. Install the Android APK or open the desktop website.
 2. Make sure the website's API and Android connection address use the same signaling service.
-3. Create a room, allow microphone access, and send the eight-digit room code to the other participant.
+3. Create a room and send its eight-digit code or invitation link. Microphone permission is optional for joining.
 4. The other participant enters the code and joins.
 5. Once voice is connected, either participant can start sharing and approve the system capture prompt.
 6. Stop sharing to let the other participant share. Ending the call, dismissing the Android app task, or process termination ends the session.
@@ -48,13 +58,13 @@ For Android LAN testing, connect both devices and the computer to the same trust
 
 On Android, supported media/game audio capture starts with screen sharing and stops with it. **Mute** affects only the microphone. The remote participant's call audio is not captured again. The source app must allow audio capture; protected content, calls, notifications, and other non-media sounds are not guaranteed to be shared.
 
-On desktop, prefer Chrome or Edge, select a **browser tab**, and enable **Share tab audio**. Whole-screen/window audio on macOS and Linux, and Safari/Firefox capabilities, depend on the browser and operating system. Windows whole-screen audio also depends on the options offered by the browser. The interface reports whether an audio track was captured. A computer without an available microphone cannot currently start a call.
+On desktop, prefer Chrome or Edge, select a **browser tab**, and enable **Share tab audio**. Whole-screen/window audio on macOS and Linux, and Safari/Firefox capabilities, depend on the browser and operating system. Windows whole-screen audio also depends on the options offered by the browser. The interface reports whether an audio track was captured. A missing or denied microphone does not prevent joining, receiving audio/video, or chatting. Device loss keeps the call open; use Retry microphone to recover.
 
 Microphone permission enables voice; Nearby devices permission supports Bluetooth audio selection. Android 13+ notification permission can be declined, but notification controls may then be unavailable, so return to the app to stop sharing. On Android 10/11, Bluetooth routing is managed by the system; the app offers speaker and earpiece/headset switching.
 
 ## Resolution, frame rate, and bitrate
 
-During a call, expand **Precise quality settings** (`精确调整画质`) on desktop or tap **Quality settings** (`画质设置`) on Android. Settings affect your outgoing screen. Apply changes without creating a new room. Settings last for the current call only.
+During a call, open **Quality and audio** (`画质与声音`), then expand or tap **Precise quality settings** (`精确调整画质`). Settings affect your outgoing screen. Apply changes without creating a new room. Settings last for the current call only.
 
 | Setting | Supported values |
 | --- | --- |
@@ -122,7 +132,7 @@ cd server
 CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -o ../dist/signaling-linux-amd64 .
 ```
 
-[deploy/screenshare.service](deploy/screenshare.service) is an optional systemd template. Create a dedicated service user and configure files, certificates, and access permissions before enabling it. Adapt all templates to your own domain, ports, and environment. [nginx-web.locations.conf](deploy/nginx-web.locations.conf) serves the website and same-origin API under `/screenshare/`, leaving the site's root route separate.
+[deploy/screenshare.service](deploy/screenshare.service) is an optional systemd template. Create a dedicated service user and configure files, certificates, and access permissions before enabling it. Adapt all templates to your own domain, ports, and environment. [nginx-web.locations.conf](deploy/nginx-web.locations.conf) serves the website and same-origin API under `/screenshare/`, leaving the site's root route separate. It also proxies Android's `/v1/rooms` API so the HTTPS origin imported from an invitation works on Android. Confirm that no other app uses this route before including the template.
 
 ## Verification
 
