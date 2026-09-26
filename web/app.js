@@ -59,6 +59,18 @@ async function keepAwake() {
   } catch { /* Viewing still works when the platform denies a wake lock. */ }
   finally {wakePending=false;}
 }
+// Pause presentation only: the same live tracks continue capture, encoding and transmission.
+function syncVideoPlayback() {
+  const visible = document.visibilityState === 'visible';
+  for (const id of ['screen','local-camera','remote-camera']) {
+    const el = $(id);
+    const cameraVisible = !cameraHidden && (id === 'local-camera' ? call?.state.cameraOn : call?.state.remoteCameraOn);
+    const needed = !!el.srcObject && (id === 'screen' ? visible || document.pictureInPictureElement === el : visible && cameraVisible);
+    el.autoplay = false;
+    if (needed) { if (el.paused) el.play().catch(()=>{}); }
+    else if (!el.paused) el.pause();
+  }
+}
 function render(s) {
   if (s.ended) {
     call=null;chatMessages=[];messageNodes.clear();readChat();chatOpen=false;cameraHidden=false;
@@ -81,7 +93,7 @@ function render(s) {
   $('camera').setAttribute('aria-pressed',String(s.cameraOn));
   for(const [id,track,enabled] of [['local-camera',s.localCamera,s.cameraOn],['remote-camera',s.remoteCamera,s.remoteCameraOn]]){
     const el=$(id);$(id+'-frame').hidden=!enabled;
-    if(el.srcObject?.getVideoTracks()[0]!==track){el.srcObject=track?new MediaStream([track]):null;if(track)el.play().catch(()=>{});}
+    if(el.srcObject?.getVideoTracks()[0]!==track){el.autoplay=false;el.srcObject=enabled&&track?new MediaStream([track]):null;}
   }
   const cameraOn=s.cameraOn||s.remoteCameraOn,visible=s.remoteSharing||s.sharing;
   $('cameras').hidden=!cameraOn||cameraHidden;
@@ -106,10 +118,10 @@ function render(s) {
   const video=visible?(s.sharing?s.localVideo:s.remoteVideo):null;
   if(video!==videoTrack){
     if(videoTrack){videoTrack.removeEventListener('mute',updateScreenStatus);videoTrack.removeEventListener('unmute',updateScreenStatus);}
-    videoTrack=video;$('screen').srcObject=video?new MediaStream([video]):null;
-    if(video){video.addEventListener('mute',updateScreenStatus);video.addEventListener('unmute',updateScreenStatus);waitForFrame(true);$('screen').play().catch(()=>{});}else frameReady=false;
+    videoTrack=video;$('screen').autoplay=false;$('screen').srcObject=video?new MediaStream([video]):null;
+    if(video){video.addEventListener('mute',updateScreenStatus);video.addEventListener('unmute',updateScreenStatus);waitForFrame(true);}else frameReady=false;
   }
-  updateScreenStatus();keepAwake();
+  syncVideoPlayback();updateScreenStatus();keepAwake();
   if(s.remoteAudio&&audioTrack!==s.remoteAudio){audioTrack=s.remoteAudio;$('remote-audio').srcObject=new MediaStream([audioTrack]);$('remote-audio').play().then(()=>$('play-audio').hidden=true).catch(()=>$('play-audio').hidden=false);}
   $('system-mute').hidden=!s.sharing||!s.systemAudio;$('system-mute').textContent=s.systemMuted?'开启共享声音':'关闭共享声音';$('system-mute').setAttribute('aria-pressed',String(s.systemMuted));
   $('share-hint').textContent=s.sharing?(s.systemAudio?(s.systemMuted?'共享声音已关闭，麦克风独立控制。':'正在共享画面和所选音频。关闭麦克风不会停止共享声音。'):'正在共享画面，当前未采集共享音频。需要声音时，停止后重新选择标签页并勾选分享音频。'):'共享声音：Chrome / Edge 选择标签页并勾选“同时分享音频”。其他共享方式取决于浏览器和系统。';
@@ -181,4 +193,5 @@ $('pip').onclick=async()=>{try{if(document.pictureInPictureElement)await documen
 function showStageControls(){clearTimeout(controlsTimer);$('stage').classList.remove('controls-hidden');if(document.fullscreenElement)controlsTimer=setTimeout(()=>{if(!$('stage').contains(document.activeElement)||document.activeElement===$('stage'))$('stage').classList.add('controls-hidden');},3000);}
 for(const type of ['pointermove','pointerdown','keydown','focusin'])$('stage').addEventListener(type,showStageControls);
 document.addEventListener('fullscreenchange',()=>{$('fullscreen').textContent=document.fullscreenElement?'退出全屏':'全屏查看';showStageControls();});
-document.addEventListener('visibilitychange',keepAwake);
+document.addEventListener('visibilitychange',()=>{syncVideoPlayback();keepAwake();});
+for (const type of ['enterpictureinpicture','leavepictureinpicture']) $('screen').addEventListener(type,syncVideoPlayback);

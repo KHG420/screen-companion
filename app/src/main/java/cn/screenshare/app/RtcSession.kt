@@ -54,6 +54,7 @@ class RtcSession(
     private var videoSender: RtpSender? = null
     private var cameraSender: RtpSender? = null
     private var screenMid: String? = null
+    private var cameraMid: String? = null
     private var cameraCapturer: CameraVideoCapturer? = null
     private var cameraHelper: SurfaceTextureHelper? = null
     private var cameraSource: VideoSource? = null
@@ -71,6 +72,15 @@ class RtcSession(
     private val playbackSamples = ShortArray(480) // 10 ms at the ADM input rate.
     @Volatile private var playbackMuted = false
     private var quality = Quality.DEFAULT
+    private val lowMemoryDevice = context.getSystemService(android.app.ActivityManager::class.java).let { it.isLowRamDevice || it.memoryClass <= 128 }
+    private var cameraLoad = VideoLoad()
+    private var screenLoad = VideoLoad()
+    private val screenQuality get() = quality.withLoad(screenLoad.level)
+    private var statsPending = false
+    private var makingOffer = false
+    private var lastCameraRecoveryMs = 0L
+    private var cameraAdaptRetryAt = 0L
+    private var screenAdaptRetryAt = 0L
     private data class VideoSample(val time: Double, val bytes: Long, val frames: Long, val counters: Map<String, Double>)
     private val videoSamples = mutableMapOf<String, VideoSample>()
     private val displays = context.getSystemService(DisplayManager::class.java)
@@ -144,28 +154,36 @@ class RtcSession(
         if (recordingAllowed) audioSender?.setTrack(audioTrack, false)
         if (isHost) {
             configureVideo(peer.addTransceiver(MediaStreamTrack.MediaType.MEDIA_TYPE_VIDEO, RtpTransceiver.RtpTransceiverInit(RtpTransceiver.RtpTransceiverDirection.SEND_RECV)))
-            cameraSender = peer.addTransceiver(MediaStreamTrack.MediaType.MEDIA_TYPE_VIDEO, RtpTransceiver.RtpTransceiverInit(RtpTransceiver.RtpTransceiverDirection.SEND_RECV)).sender
+            val camera = peer.addTransceiver(MediaStreamTrack.MediaType.MEDIA_TYPE_VIDEO, RtpTransceiver.RtpTransceiverInit(RtpTransceiver.RtpTransceiverDirection.SEND_RECV))
+            preferHardwareVideo(camera)
+            cameraSender = camera.sender
             bindChannel(peer.createDataChannel("companion-v1", DataChannel.Init()))
         }
         displays.registerDisplayListener(displayListener, handler)
     }
     private fun configureVideo(video: RtpTransceiver) {
         video.direction = RtpTransceiver.RtpTransceiverDirection.SEND_RECV
+        preferHardwareVideo(video)
+        videoSender = video.sender
+    }
+    private fun preferHardwareVideo(video: RtpTransceiver) {
         val hardwareH264 = HardwareVideoEncoderFactory(egl.eglBaseContext, true, true).supportedCodecs.any { it.name.equals("H264", ignoreCase = true) }
         if (hardwareH264) {
             val codecs = factory.getRtpSenderCapabilities(MediaStreamTrack.MediaType.MEDIA_TYPE_VIDEO).codecs
             video.setCodecPreferences(codecs.sortedBy { if (it.name.equals("H264", ignoreCase = true)) 0 else 1 })
         }
-        videoSender = video.sender
     }
     private fun onMain(block: () -> Unit) { handler.post { if (!disposed) block() } }
 
     suspend fun offer(restart: Boolean = false) {
-        if (disposed || peer.signalingState() != PeerConnection.SignalingState.STABLE) return
-        val constraints = MediaConstraints().apply { if (restart) mandatory.add(MediaConstraints.KeyValuePair("IceRestart", "true")) }
-        val description = createDescription(true, constraints)
-        setDescription(description, local = true)
-        signal("offer", JSONObject().put("sdp", description.description))
+        if (disposed || makingOffer || peer.signalingState() != PeerConnection.SignalingState.STABLE) return
+        makingOffer = true
+        try {
+            val constraints = MediaConstraints().apply { if (restart) mandatory.add(MediaConstraints.KeyValuePair("IceRestart", "true")) }
+            val description = createDescription(true, constraints)
+            setDescription(description, local = true)
+            signal("offer", JSONObject().put("sdp", description.description))
+        } finally { makingOffer = false }
     }
     suspend fun acceptOffer(sdp: String) {
         setDescription(SessionDescription(SessionDescription.Type.OFFER, sdp), local = false)
@@ -191,7 +209,9 @@ class RtcSession(
         (screen.receiver.track() as? VideoTrack)?.let(remoteVideo)
         videos.getOrNull(1)?.let {
             it.direction = RtpTransceiver.RtpTransceiverDirection.SEND_RECV
+            preferHardwareVideo(it)
             cameraSender = it.sender
+            cameraMid = it.mid
             (it.receiver.track() as? VideoTrack)?.let(remoteCamera)
         }
     }
@@ -270,23 +290,43 @@ class RtcSession(
         val events = object : CameraVideoCapturer.CameraEventsHandler {
             override fun onCameraError(error: String) = onMain { cameraFailed("摄像头启动失败或已断开") }
             override fun onCameraDisconnected() = onMain { cameraFailed("摄像头已断开") }
-            override fun onCameraFreezed(error: String) = onMain { cameraFailed("摄像头无响应") }
+            override fun onCameraFreezed(error: String) = onMain {
+                val capture = cameraCapturer ?: return@onMain
+                val now = android.os.SystemClock.elapsedRealtime()
+                if (lastCameraRecoveryMs != 0L && now-lastCameraRecoveryMs < 15_000) {
+                    cameraFailed("摄像头恢复后仍无响应，请重新开启"); return@onMain
+                }
+                lastCameraRecoveryMs = now
+                // CameraVideoCapturer restarts its capture session when changing format.
+                runCatching {
+                    capture.changeCaptureFormat(640,360,15)
+                    cameraSource?.adaptOutputFormat(640,360,15)
+                    cameraLoad = VideoLoad(2)
+                    videoSamples.clear()
+                }.onFailure { cameraFailed("摄像头无法恢复，请重新开启") }
+            }
             override fun onCameraOpening(name: String) = Unit
             override fun onFirstFrameAvailable() = Unit
             override fun onCameraClosed() = Unit
         }
         try {
+            cameraLoad = VideoLoad(if (lowMemoryDevice) 1 else 0)
+            lastCameraRecoveryMs = 0L
+            videoSamples.clear()
             val capture = checkNotNull(enumerator.createCapturer(device, events)).also { cameraCapturer = it }
             val helper = SurfaceTextureHelper.create("CameraCapture", egl.eglBaseContext).also { cameraHelper = it }
             val source = factory.createVideoSource(false).also { cameraSource = it }
             capture.initialize(helper, context, source.capturerObserver)
             val track = factory.createVideoTrack("camera", source).also { cameraTrack = it }
             check(cameraSender?.setTrack(track, false) == true) { "无法连接摄像头轨道" }
-            source.adaptOutputFormat(1280,720,30)
-            capture.startCapture(1280,720,30)
+            val format = cameraFormat(cameraLoad.level)
+            source.adaptOutputFormat(format.first,format.second,format.third)
             val parameters = cameraSender!!.parameters
-            parameters.encodings.forEach { it.maxBitrateBps = 2_000_000; it.maxFramerate = 30 }
+            parameters.degradationPreference = RtpParameters.DegradationPreference.MAINTAIN_FRAMERATE
+            // Camera yields bandwidth to the screen without changing screen locks.
+            parameters.encodings.forEach { it.maxBitrateBps = 2_000_000; it.maxFramerate = format.third; it.bitratePriority = 0.5 }
             if (parameters.encodings.isNotEmpty()) check(cameraSender!!.setParameters(parameters))
+            capture.startCapture(format.first,format.second,format.third)
             sendCameraState()
             return track
         } catch (e: Exception) { stopCamera(); throw e }
@@ -298,6 +338,8 @@ class RtcSession(
         })
     }
     fun stopCamera() {
+        cameraLoad = VideoLoad()
+        videoSamples.clear()
         val capture = cameraCapturer
         cameraCapturer = null
         cameraSender?.setTrack(null, false)
@@ -312,6 +354,8 @@ class RtcSession(
     fun startScreen(data: Intent, selectedQuality: Quality) {
         check(capturer == null)
         quality = selectedQuality
+        screenLoad = VideoLoad(if (lowMemoryDevice && !(quality.resolutionLocked && quality.fpsLocked)) 1 else 0)
+        videoSamples.clear()
         val screen = ScreenCapturerAndroid(data, object : MediaProjection.Callback() {
             override fun onStop() = onMain { if (capturer != null) projectionStopped() }
         })
@@ -319,16 +363,16 @@ class RtcSession(
         val helper = SurfaceTextureHelper.create("ScreenCapture", egl.eglBaseContext).also { captureHelper = it }
         // WebRTC treats BALANCED + screencast as MAINTAIN_RESOLUTION. Use the
         // motion path for high FPS too: preserving resolution does not require a static-content encoder.
-        val source = factory.createVideoSource(quality.detailContent).also { videoSource = it }
+        val source = factory.createVideoSource(screenQuality.detailContent).also { videoSource = it }
         screen.initialize(helper, context, source.capturerObserver)
         val track = factory.createVideoTrack("screen", source).also { localVideo = it }
         check(videoSender?.setTrack(track, false) == true) { "无法连接屏幕轨道" }
         val (width, height) = captureSize()
-        source.adaptOutputFormat(width, height, quality.fps)
-        adaptedFormat = Triple(width, height, quality.fps)
+        source.adaptOutputFormat(width, height, screenQuality.fps)
+        adaptedFormat = Triple(width, height, screenQuality.fps)
         // Apply the selected bitrate/FPS before capture can submit its first frame.
         applyEncoding()
-        screen.startCapture(width, height, quality.fps)
+        screen.startCapture(width, height, screenQuality.fps)
         captureDimensions = width to height
         if (context.checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_GRANTED)
             runCatching { startPlaybackAudio(checkNotNull(screen.mediaProjection)) }.onFailure { onMain(playbackFailed) }
@@ -360,10 +404,11 @@ class RtcSession(
     fun setQuality(value: Quality) {
         if (value == quality) return
         val old = quality
+        val oldLoad = screenLoad
         try {
-            quality = value; updateCaptureSize(); applyEncoding()
+            quality = value; screenLoad = VideoLoad(); videoSamples.clear(); updateCaptureSize(); applyEncoding()
         } catch (e: Exception) {
-            quality = old
+            quality = old; screenLoad = oldLoad
             val restored = runCatching { updateCaptureSize(); applyEncoding() }.isSuccess
             if (!restored) { stopScreen(); projectionStopped() }
             throw IllegalStateException(if (restored) "设备未接受该画质组合，已恢复原设置" else "画质恢复失败，已停止共享；语音仍可继续", e)
@@ -373,18 +418,18 @@ class RtcSession(
     private fun captureSize(): Pair<Int, Int> {
         val metrics = DisplayMetrics()
         context.getSystemService(WindowManager::class.java).defaultDisplay.getRealMetrics(metrics)
-        return quality.captureSize(metrics.widthPixels, metrics.heightPixels)
+        return screenQuality.captureSize(metrics.widthPixels, metrics.heightPixels)
     }
     private fun updateCaptureSize() {
         val screen = capturer ?: return
         val source = videoSource ?: return
         val dimensions = captureSize()
         val (w, h) = dimensions
-        val format = Triple(w, h, quality.fps)
+        val format = Triple(w, h, screenQuality.fps)
         // FPS is enforced by the source adapter; changing it must not reset the capture surface.
         if (adaptedFormat != format) {
             adaptedFormat = null // A failed native call must be retried when restoring the old quality.
-            source.adaptOutputFormat(w, h, quality.fps)
+            source.adaptOutputFormat(w, h, screenQuality.fps)
             adaptedFormat = format
         }
         // WebRTC synchronously resizes/rebinds the virtual display even for identical dimensions.
@@ -392,16 +437,16 @@ class RtcSession(
         if (captureDimensions != dimensions) {
             captureDimensions = null
             if (BuildConfig.DEBUG) android.util.Log.d("CaptureResizeProbe", "resize ${w}x${h} fps=${quality.fps}")
-            screen.changeCaptureFormat(w, h, quality.fps)
+            screen.changeCaptureFormat(w, h, screenQuality.fps)
             captureDimensions = dimensions
         }
     }
     private fun applyEncoding() {
-        videoSource?.setIsScreencast(quality.detailContent)
+        videoSource?.setIsScreencast(screenQuality.detailContent)
         val sender = videoSender ?: return
         val p = sender.parameters
         p.degradationPreference = quality.degradationPreference
-        p.encodings.forEach { it.maxBitrateBps = quality.bitrate; it.maxFramerate = quality.fps }
+        p.encodings.forEach { it.maxBitrateBps = quality.bitrate; it.maxFramerate = screenQuality.fps }
         if (p.encodings.isNotEmpty()) {
             check(sender.setParameters(p)) { "编码器不支持此参数组合" }
             if (quality.resolutionLocked || quality.fpsLocked)
@@ -410,6 +455,8 @@ class RtcSession(
         }
     }
     fun stopScreen() {
+        screenLoad = VideoLoad()
+        videoSamples.clear()
         stopPlaybackAudio()
         val old = capturer ?: return
         capturer = null // Projection callback must not recursively stop this capture.
@@ -422,8 +469,10 @@ class RtcSession(
         }
     }
     fun stats(onStats: (String) -> Unit) {
-        if (disposed) return
-        peer.getStats { report ->
+        if (disposed || statsPending) return
+        statsPending = true
+        peer.getStats { report -> onMain {
+            statsPending = false
             val values = report.statsMap.values
             if (BuildConfig.DEBUG) {
                 fun total(type: String, kind: String, field: String) = values.filter { it.type == type && (it.members["kind"] == kind || it.members["mediaType"] == kind) }.sumOf { (it.members[field] as? Number)?.toLong() ?: 0L }
@@ -439,7 +488,9 @@ class RtcSession(
             val lines = mutableListOf<String>()
             values.filter { it.type in listOf("outbound-rtp","inbound-rtp") && (it.members["kind"] == "video" || it.members["mediaType"] == "video") }.forEach { row ->
                 val m = row.members
-                if (m["mid"]?.toString() != screenMid) return@forEach
+                val mid = m["mid"]?.toString() ?: return@forEach
+                if (mid != screenMid && mid != cameraMid) return@forEach
+                val camera = mid == cameraMid
                 val sending = row.type == "outbound-rtp"
                 val bytes = (m[if (sending) "bytesSent" else "bytesReceived"] as? Number)?.toLong() ?: 0L
                 val frames = (m[if (sending) "framesEncoded" else "framesDecoded"] as? Number)?.toLong() ?: 0L
@@ -447,9 +498,17 @@ class RtcSession(
                 val old = videoSamples.put(row.id, VideoSample(row.timestampUs, bytes, frames, counters))
                 val elapsed = old?.let { (row.timestampUs-it.time)/1_000_000.0 } ?: 0.0
                 val fresh = elapsed > 0 && old != null && bytes >= old.bytes && frames >= old.frames
+                if (sending && fresh && peer.connectionState() == PeerConnection.PeerConnectionState.CONNECTED && (if(camera) cameraTrack != null else capturer != null)) {
+                    val load = if(camera) cameraLoad else screenLoad
+                    val fps = if(camera) cameraFormat(load.level).third else screenQuality.fps
+                    val next = load.next(elapsed, (frames-old!!.frames).toDouble(), counters["totalEncodeTime"]?.minus(old.counters["totalEncodeTime"] ?: Double.NaN) ?: Double.NaN,
+                        counters["packetsSent"]?.minus(old.counters["packetsSent"] ?: Double.NaN) ?: Double.NaN,
+                        counters["totalPacketSendDelay"]?.minus(old.counters["totalPacketSendDelay"] ?: Double.NaN) ?: Double.NaN, m["qualityLimitationReason"]?.toString(), fps)
+                    adaptMedia(camera, next)
+                }
                 val width = (m["frameWidth"] as? Number)?.toInt()
                 val height = (m["frameHeight"] as? Number)?.toInt()
-                if (width != null && height != null && ((!sending && fresh && bytes > old!!.bytes) || (sending && capturer != null))) {
+                if (width != null && height != null && ((!sending && fresh && bytes > old!!.bytes) || (sending && (if (camera) cameraTrack != null else capturer != null)))) {
                     val rate = if (fresh) String.format(java.util.Locale.ROOT, "%.1f FPS · %.2f Mbps", (frames-old!!.frames)/elapsed, (bytes-old.bytes)*8/elapsed/1e6) else "测量中"
                     val reason = when(m["qualityLimitationReason"]) { "cpu" -> " · 设备编码性能受限"; "bandwidth" -> " · 网络带宽受限"; else -> "" }
                     val timing = mutableListOf<String>()
@@ -468,14 +527,14 @@ class RtcSession(
                         val freezes = counters["freezeCount"]?.minus(old?.counters?.get("freezeCount") ?: 0.0)?.toInt() ?: 0
                         if (freezes > 0) timing += "本周期冻结 $freezes 次"
                     }
-                    lines += "${if(sending) "发送" else "接收"} ${width}×${height} · ${rate}${reason}"
+                    lines += "${if(camera) "摄像头" else "屏幕"}${if(sending) "发送" else "接收"} ${width}×${height} · ${rate}${reason}"
                     if (timing.isNotEmpty()) lines += timing.joinToString(" · ")
-                    if (sending && quality.resolutionLocked) {
+                    if (sending && !camera && quality.resolutionLocked) {
                         val (cw, ch) = captureSize()
                         if (maxOf(width,height) < maxOf(cw,ch) || minOf(width,height) < minOf(cw,ch))
                             lines += "实际发送尺寸低于锁定目标；请检查设备能力与网络，设置未被改写"
                     }
-                    if (sending && quality.fpsLocked && fresh && (frames-old!!.frames)/elapsed < quality.fps * .85)
+                    if (sending && !camera && quality.fpsLocked && fresh && (frames-old!!.frames)/elapsed < quality.fps * .85)
                         lines += "实际帧率低于锁定目标；静止画面、采集、设备或网络可能限制出帧，设置未被改写"
                 }
             }
@@ -483,8 +542,40 @@ class RtcSession(
                 val (w,h) = captureSize()
                 if (maxOf(w,h) < quality.longEdge && minOf(w,h) < quality.shortEdge) lines += "采集源 ${w}×${h}：低于目标，不放大冒充 4K"
             }
+            if (screenLoad.level > 0 && capturer != null) lines += "正在减轻共享采集负担，稳定后逐级恢复；手动锁定不变"
+            if (cameraLoad.level > 0 && cameraTrack != null) lines += "摄像头已降低采集负担，稳定后逐级恢复清晰度"
             onMain { onStats((if (pair == null) "正在检测连接" else (if (relay) "中转连接" else "直接连接") + (rtt?.let { " · 网络往返 ${it} ms" } ?: "")) +
                 (if (lines.isEmpty()) "" else "\n" + lines.joinToString("\n"))) }
+        } }
+    }
+    private fun adaptMedia(camera: Boolean, next: VideoLoad) {
+        if (android.os.SystemClock.elapsedRealtime() < (if(camera) cameraAdaptRetryAt else screenAdaptRetryAt)) return
+        val old = if (camera) cameraLoad else screenLoad
+        if (next.level == old.level) { if(camera) cameraLoad = next else screenLoad = next; return }
+        if (!camera && quality.resolutionLocked && quality.fpsLocked) return
+        fun apply(load: VideoLoad) {
+            if (camera) {
+                val format = cameraFormat(load.level)
+                val sender = cameraSender ?: return
+                val parameters = sender.parameters
+                parameters.encodings.forEach { it.maxFramerate = format.third }
+                if(parameters.encodings.isNotEmpty()) check(sender.setParameters(parameters))
+                cameraSource?.adaptOutputFormat(format.first,format.second,format.third)
+                cameraCapturer?.changeCaptureFormat(format.first,format.second,format.third)
+                cameraLoad = load
+            } else {
+                screenLoad = load; updateCaptureSize(); applyEncoding()
+            }
+        }
+        try { apply(next) } catch (_: Exception) {
+            if (runCatching { apply(old.copy(healthy = 0)) }.isFailure) {
+                if (camera) cameraFailed("摄像头调整失败，已停止视频，请重新开启")
+                else { stopScreen(); projectionStopped() }
+                return
+            }
+            if(camera) cameraLoad = old.copy(healthy = 0) else screenLoad = old.copy(healthy = 0)
+            val retryAt = android.os.SystemClock.elapsedRealtime()+15000
+            if(camera) cameraAdaptRetryAt = retryAt else screenAdaptRetryAt = retryAt
         }
     }
     fun close() {
@@ -524,4 +615,31 @@ internal fun mixPlaybackPcm(microphone: ByteBuffer, playback: ShortArray, count:
         val sum = microphone.getShort(i * 2).toInt() + playback[i].toInt()
         microphone.putShort(i * 2, sum.coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt()).toShort())
     }
+}
+
+internal data class VideoLoad(val level: Int = 0, val healthy: Int = 0) {
+    fun next(elapsed: Double, frames: Double, encodeSeconds: Double, packets: Double, queueSeconds: Double, reason: String?, fps: Int): VideoLoad {
+        if (elapsed !in 1.0..5.0 || !frames.isFinite() || frames <= 0 || encodeSeconds < 0 || packets < 0 || queueSeconds < 0) return copy(healthy = 0)
+        val encode = encodeSeconds / frames
+        val queue = if(packets > 0) queueSeconds / packets else Double.NaN
+        if(reason == "cpu" || encode > .8/fps || queue > .1) return VideoLoad(minOf(2,level+1))
+        val good = encode.isFinite() && encode >= 0 && encode < .5/fps && reason == "none" &&
+            (!queue.isFinite() || queue in 0.0..<.03) && frames/elapsed >= fps*.8
+        val count = if(good) healthy+1 else 0
+        return if(count >= 6) VideoLoad(maxOf(0,level-1)) else copy(healthy = count)
+    }
+}
+internal fun cameraFormat(level: Int): Triple<Int, Int, Int> = when(level) {
+    0 -> Triple(1280,720,30)
+    1 -> Triple(960,540,24)
+    else -> Triple(640,360,15)
+}
+internal fun Quality.withLoad(level: Int): Quality {
+    if(level == 0) return this
+    val spatial = !resolutionLocked && (fpsLocked || priority != VideoPriority.RESOLUTION)
+    val temporal = !fpsLocked && (resolutionLocked || priority != VideoPriority.FRAMERATE)
+    val scale = if(level == 1) .75 else .5
+    return copy(longEdge = if(spatial) maxOf(320,(longEdge*scale/2).toInt()*2) else longEdge,
+        shortEdge = if(spatial) maxOf(180,(shortEdge*scale/2).toInt()*2) else shortEdge,
+        fps = if(temporal) minOf(fps,maxOf(10,(fps/(if(level == 1) 1.5 else 3.0)).toInt())) else fps)
 }

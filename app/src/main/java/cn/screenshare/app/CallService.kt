@@ -58,6 +58,8 @@ data class Quality(
 }
 data class ChatMessage(val text: String, val mine: Boolean)
 data class CallState(
+    val floatingEnabled: Boolean = true,
+    val floatingVideo: Boolean = true,
     val cameraOn: Boolean = false,
     val localCamera: org.webrtc.VideoTrack? = null,
     val remoteCamera: org.webrtc.VideoTrack? = null,
@@ -101,12 +103,27 @@ class CallService : Service() {
         const val STOP_SHARE = "stop-share"
         const val NOTIFICATION_ID = 41
     }
+    var uiVisible = false
+    internal var overlayDraft = ""
+    private var callOverlay: CallOverlay? = null
+    internal fun showCallOverlay(): Boolean {
+        if (callOverlay != null) return true
+        if (!state.value.active || !state.value.sharing) return false
+        val window = CallOverlay(this)
+        callOverlay = window
+        return window.show().also { if (!it) callOverlay = null }
+    }
+    internal fun hideCallOverlay() { val window = callOverlay; callOverlay = null; window?.close() }
+    override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {
+        super.onConfigurationChanged(newConfig); callOverlay?.resize()
+    }
     lateinit var session: CallSession
         private set
     override fun onCreate() {
         super.onCreate()
         current = this
         getSystemService(NotificationManager::class.java).createNotificationChannel(NotificationChannel("call", "通话与屏幕共享", NotificationManager.IMPORTANCE_LOW))
+        getSystemService(NotificationManager::class.java).createNotificationChannel(NotificationChannel("chat", "通话新消息", NotificationManager.IMPORTANCE_HIGH))
         session = CallSession(this, state)
     }
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -143,7 +160,17 @@ class CallService : Service() {
         val type = ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK or microphoneType or cameraType or (if (sharing) ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION else 0)
         startForeground(NOTIFICATION_ID, notification.build(), type)
     }
+    fun incomingMessage(text: String) {
+        if (uiVisible || callOverlay?.displaysMessages == true || (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED)) return
+        val open = PendingIntent.getActivity(this, 3, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+        val notification = NotificationCompat.Builder(this, "chat").setSmallIcon(R.drawable.ic_notification)
+            .setContentTitle("对方发来消息").setContentText(text).setStyle(NotificationCompat.BigTextStyle().bigText(text))
+            .setContentIntent(open).setAutoCancel(true).setCategory(NotificationCompat.CATEGORY_MESSAGE)
+            .setVisibility(NotificationCompat.VISIBILITY_PRIVATE).build()
+        getSystemService(NotificationManager::class.java).notify(42, notification)
+    }
+    fun clearMessageNotification() { getSystemService(NotificationManager::class.java).cancel(42) }
     override fun onBind(intent: Intent?): IBinder? = null
     override fun onTaskRemoved(rootIntent: Intent?) { session.end(); super.onTaskRemoved(rootIntent) }
-    override fun onDestroy() { session.dispose(); if (current === this) current = null; super.onDestroy() }
+    override fun onDestroy() { hideCallOverlay(); clearMessageNotification(); session.dispose(); if (current === this) current = null; super.onDestroy() }
 }

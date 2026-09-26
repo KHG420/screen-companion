@@ -1,0 +1,81 @@
+<!doctype html><meta charset="utf-8"><title>同屏 · 降负载与恢复验证</title>
+<h1>降负载与恢复验证</h1>
+<p>合成动态画面，无需打开真实摄像头或录屏。真实 Call 与 WebRTC 传输；使用明确注入的压力与健康统计验证采集参数降档、逐级恢复，不能代替低端真机性能测试。</p>
+<button id="run">运行测试</button><pre id="result">等待开始</pre>
+<video id="screen" autoplay muted playsinline width="640"></video>
+<video id="camera" autoplay muted playsinline width="320"></video>
+<script type="module">
+import {Call} from '../call.js';
+const wait=ms=>new Promise(r=>setTimeout(r,ms));
+const out=document.querySelector('#result'),button=document.querySelector('#run');
+const screen=document.querySelector('#screen'),camera=document.querySelector('#camera');
+const originalCamera=navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
+const originalDisplay=navigator.mediaDevices.getDisplayMedia.bind(navigator.mediaDevices);
+let timers=[],streams=[],audio;
+function source(w,h){
+ const canvas=document.createElement('canvas');canvas.width=w;canvas.height=h;
+ const ctx=canvas.getContext('2d',{alpha:false});let n=0;
+ const stream=canvas.captureStream(0),track=stream.getVideoTracks()[0];streams.push(stream);
+ const draw=()=>{ctx.fillStyle='#293345';ctx.fillRect(0,0,w,h);ctx.fillStyle='#f2d28d';ctx.font='28px monospace';
+ for(let y=40;y<(w===1280?100:h);y+=60)ctx.fillText(`清晰文字 Screen Companion 0123456789 ${n} `.repeat(5),10,y);
+ ctx.fillStyle='#e98560';ctx.fillRect(n*15%(w-160),h/2,160,160);n++;track.requestFrame();};
+ draw();timers.push(setInterval(draw,1000/30));return stream;
+}
+function rows(report){return [...report.values()].filter(r=>['outbound-rtp','inbound-rtp'].includes(r.type)&&r.kind==='video');}
+function metrics(before,report){return rows(report).map(r=>{
+ const a=before.get(r.id)||{},dt=(r.timestamp-a.timestamp)/1000,sending=r.type==='outbound-rtp';
+ const frames=sending?'framesEncoded':'framesDecoded',bytes=sending?'bytesSent':'bytesReceived';
+ const avg=(total,count)=>r[count]>a[count]?(r[total]-a[total])*1000/(r[count]-a[count]):null;
+ return {direction:r.type,mid:r.mid,width:r.frameWidth,height:r.frameHeight,fps:(r[frames]-a[frames])/dt,mbps:8*(r[bytes]-a[bytes])/dt/1e6,
+ codec:report.get(r.codecId)?.mimeType,implementation:r.encoderImplementation||r.decoderImplementation,powerEfficient:r.powerEfficientEncoder??r.powerEfficientDecoder,
+ encodeMs:avg('totalEncodeTime','framesEncoded'),decodeMs:avg('totalDecodeTime','framesDecoded'),queueMs:avg('totalPacketSendDelay','packetsSent'),bufferMs:avg('jitterBufferDelay','jitterBufferEmittedCount'),freezes:r.freezeCount-a.freezeCount,limitation:r.qualityLimitationReason};});}
+button.onclick=async()=>{
+ button.disabled=true;document.body.dataset.done='running';let host,guest;const results={samples:[]};
+ try{
+ audio=new AudioContext();audio.resume().catch(()=>{});
+ navigator.mediaDevices.getUserMedia=async q=>q.video?source(1280,720):audio.createMediaStreamDestination().stream;
+ navigator.mediaDevices.getDisplayMedia=async()=>source(2560,1440);
+ host=new Call('/api');guest=new Call('/api',s=>{
+ for(const [el,track] of [[screen,s.remoteVideo],[camera,s.remoteCamera]])if(track&&el.srcObject?.getVideoTracks()[0]!==track){el.srcObject=new MediaStream([track]);el.play().catch(()=>{});}
+ });
+ await host.start();await guest.start(host.state.roomId);
+ for(let i=0;i<200&&!(host.state.connected&&guest.state.connected&&host.state.chatReady&&guest.state.chatReady);i++)await wait(100);
+ if(!host.state.chatReady||!guest.state.chatReady)throw Error('Connection timeout');
+ await host.toggleCamera();await guest.toggleCamera();await host.share();
+ if(!host.state.cameraOn||!guest.state.cameraOn||!host.state.sharing)throw Error(JSON.stringify([host.state.error,guest.state.error]));
+ clearInterval(host.statsTimer);
+ results.phases=[];
+ const parameters=()=>({screen:host.video.sender.getParameters(),camera:host.cameraVideo.sender.getParameters(),screenLoad:host.screenLoad,cameraLoad:host.cameraLoad,selected:host.state.quality});
+ const pressure=(fps=30)=>[{timestamp:1000,framesEncoded:1,totalEncodeTime:0,packetsSent:1,totalPacketSendDelay:0},{timestamp:3000,framesEncoded:1+fps*2,totalEncodeTime:2,packetsSent:201,totalPacketSendDelay:0,qualityLimitationReason:'cpu'}];
+ for(let i=0;i<2;i++){
+   const [before,after]=pressure();await host.adaptMedia(false,after,before);await host.adaptMedia(true,after,before);await wait(2000);
+ }
+ results.phases.push({name:'reduced',...parameters()});
+ if(host.screenLoad.level!==2||host.cameraLoad.level!==2)throw Error('Failed to reduce capture load');
+ if(host.video.sender.getParameters().encodings[0].maxFramerate!==10||host.cameraVideo.sender.getParameters().encodings[0].maxFramerate!==15)throw Error('Sender did not accept reduced FPS');
+ for(let i=0;i<12;i++){
+   await wait(2000);
+   const before={timestamp:1000,framesEncoded:1,totalEncodeTime:0,packetsSent:1,totalPacketSendDelay:0};
+   const after={timestamp:3000,framesEncoded:61,totalEncodeTime:.01,packetsSent:201,totalPacketSendDelay:.01,qualityLimitationReason:'none'};
+   await host.adaptMedia(false,after,before);await host.adaptMedia(true,after,before);
+   if(i===5)results.phases.push({name:'partially-restored',...parameters()});
+ }
+ results.phases.push({name:'restored',...parameters()});
+ if(host.screenLoad.level!==0||host.cameraLoad.level!==0)throw Error('Failed to restore');
+ results.connected=host.state.connected&&guest.state.connected;
+ // Actual negotiated ICE restart must keep the room and camera tracks alive.
+ await host.offer(true);await wait(4000);
+ results.afterIceRestart={connected:host.state.connected&&guest.state.connected,screen:host.state.sharing,camera:host.state.cameraOn,roomUnchanged:host.state.roomId===guest.state.roomId};
+ if(!Object.values(results.afterIceRestart).every(Boolean))throw Error('ICE restart interrupted media state');
+ const a=await host.pc.getStats(),b=await guest.pc.getStats();await wait(3000);
+ results.samples.push({host:metrics(a,await host.pc.getStats()),guest:metrics(b,await guest.pc.getStats())});
+ document.body.dataset.done='true';
+ }catch(e){results.error=e.stack;document.body.dataset.done='error';}
+ finally{
+ host?.end();guest?.end();timers.forEach(clearInterval);timers=[];streams.forEach(s=>s.getTracks().forEach(t=>t.stop()));streams=[];
+ screen.srcObject=camera.srcObject=null;await audio?.close();
+ navigator.mediaDevices.getUserMedia=originalCamera;navigator.mediaDevices.getDisplayMedia=originalDisplay;
+ out.textContent=JSON.stringify(results,null,2);button.disabled=false;
+ }
+};
+</script>

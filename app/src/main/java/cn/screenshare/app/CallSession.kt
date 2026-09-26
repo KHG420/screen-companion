@@ -27,6 +27,20 @@ class CallSession(private val service: CallService, private val state: MutableSt
     private var finalState = CallState(notice = "通话已结束")
     private var sharingWork: Job? = null
     private var reconnectJob: Job? = null
+    private var recoveryStartedAt = 0L
+    private var recoveryAttempts = 0
+    private val connectivity = service.getSystemService(android.net.ConnectivityManager::class.java)
+    private var networkRegistered = false
+    private val networkCallback = object : android.net.ConnectivityManager.NetworkCallback() {
+        override fun onAvailable(network: android.net.Network) {
+            scope.launch {
+                if (!ending && !state.value.connected && reconnectJob?.isActive == true && recoveryAttempts < 3) {
+                    reconnectJob?.cancel(); reconnectJob = null
+                    connectionChanged(PeerConnection.PeerConnectionState.FAILED)
+                }
+            }
+        }
+    }
     private val messages = Channel<Pair<String, JSONObject>>(128)
     private val audio = service.getSystemService(AudioManager::class.java)
     private var savedMode = AudioManager.MODE_NORMAL
@@ -65,7 +79,9 @@ class CallSession(private val service: CallService, private val state: MutableSt
                     { message -> state.update {
                         if (message.optString("type") == "camera") it.copy(remoteCameraOn = message.getBoolean("enabled"))
                         else it.copy(chatMessages = (it.chatMessages + ChatMessage(message.getString("text"), false)).takeLast(200), chatRevision = it.chatRevision + 1, chatUnread = it.chatUnread + 1)
-                    } },
+                    }
+                        if (message.optString("type") == "chat") service.incomingMessage(message.getString("text"))
+                    },
                     { ready -> state.update { it.copy(chatReady = ready, remoteCameraOn = ready && it.remoteCameraOn) } },
                     { error -> stopCamera(); state.update { it.copy(error = error) } },
                     ::connectionChanged,
@@ -77,7 +93,8 @@ class CallSession(private val service: CallService, private val state: MutableSt
                     peerPresent = credentials.role == "guest", status = if (credentials.role == "host") "等待对方加入" else "正在连接语音") }
                 launch { sendLoop(api) }
                 launch { pollLoop(api) }
-                launch { while (isActive) { delay(3000); rtc?.stats { value -> state.update { it.copy(stats = value) } } } }
+                networkRegistered = runCatching { connectivity.registerDefaultNetworkCallback(networkCallback) }.isSuccess
+                launch { while (isActive) { delay(2000); rtc?.stats { value -> state.update { it.copy(stats = value) } } } }
             } catch (e: CancellationException) { throw e }
             catch (e: Exception) { end(error = friendly(e)) }
         }
@@ -137,19 +154,29 @@ class CallSession(private val service: CallService, private val state: MutableSt
         when (value) {
             PeerConnection.PeerConnectionState.CONNECTED -> {
                 reconnectJob?.cancel(); reconnectJob = null
+                recoveryStartedAt = 0L; recoveryAttempts = 0
                 state.update { it.copy(connected = true, status = "语音已连接", notice = null) }
             }
             PeerConnection.PeerConnectionState.CONNECTING -> state.update { it.copy(status = "正在连接语音") }
             PeerConnection.PeerConnectionState.DISCONNECTED, PeerConnection.PeerConnectionState.FAILED -> {
                 state.update { it.copy(connected = false, status = "正在恢复通话") }
                 if (reconnectJob?.isActive != true) reconnectJob = scope.launch {
-                    delay(2000)
-                    try {
-                        if (state.value.role == "host") rtc?.offer(restart = true) else queueSignal("restart", JSONObject())
-                        delay(20_000)
-                        if (!state.value.connected) end(error = if (state.value.hasTurn) "无法恢复通话，请检查网络后重新加入" else "两台手机未能直连，请配置中转服务或改用同一 Wi-Fi")
-                    } catch (e: CancellationException) { throw e }
-                    catch (e: Exception) { end(error = friendly(e)) }
+                    if (recoveryStartedAt == 0L) recoveryStartedAt = android.os.SystemClock.elapsedRealtime()
+                    // Bound even an SDP callback that never returns; network changes keep this budget.
+                    withTimeoutOrNull((30_000 - (android.os.SystemClock.elapsedRealtime()-recoveryStartedAt)).coerceAtLeast(0)) {
+                        if (value != PeerConnection.PeerConnectionState.FAILED) delay(1500)
+                        while (recoveryAttempts < 3) {
+                            if (state.value.connected) return@withTimeoutOrNull
+                            recoveryAttempts++
+                            try {
+                                if (state.value.role == "host") rtc?.offer(restart = true) else queueSignal("restart", JSONObject())
+                            } catch (e: CancellationException) { throw e }
+                            catch (_: Exception) { /* Retry transient negotiation failures within the same deadline. */ }
+                            delay(6000)
+                        }
+                        delay((30_000 - (android.os.SystemClock.elapsedRealtime()-recoveryStartedAt)).coerceAtLeast(0))
+                    }
+                    if (!state.value.connected) end(error = if (state.value.hasTurn) "无法恢复通话，请检查网络后重新加入" else "两台手机未能直连，请配置中转服务或改用同一 Wi-Fi")
                 }
             }
             else -> Unit
@@ -295,7 +322,9 @@ class CallSession(private val service: CallService, private val state: MutableSt
     fun end(error: String? = null, notice: String? = null, notifyPeer: Boolean = true) {
         if (ending) return
         ending = true
+        if (networkRegistered) { connectivity.unregisterNetworkCallback(networkCallback); networkRegistered = false }
         sharingWork?.cancel(); reconnectJob?.cancel()
+        service.hideCallOverlay()
         // Stop local capture/microphone immediately, even while the server is unreachable.
         runCatching { rtc?.close() }; rtc = null
         finalState = CallState(error = error, notice = notice)
@@ -308,6 +337,7 @@ class CallSession(private val service: CallService, private val state: MutableSt
     }
     @Suppress("DEPRECATION")
     fun dispose() {
+        if (networkRegistered) { connectivity.unregisterNetworkCallback(networkCallback); networkRegistered = false }
         ending = true; signaling?.close(); scope.cancel(); messages.close()
         runCatching { rtc?.close() }; rtc = null
         state.value = finalState

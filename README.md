@@ -6,6 +6,8 @@ Two-person screen sharing, camera video calls, and text/voice chat for Android a
 
 Version **0.5.2** is a development and testing release. It does not include accounts, remote control, or recording storage. Screen video, microphone audio, and supported shared media audio travel over WebRTC. HTTP long polling exchanges only SDP, ICE candidates, and sharing state; the signaling server does not forward media. Devices connect directly when possible, with TURN as a fallback. High resolution and low latency are not guaranteed across physical devices and networks.
 
+The Android test APK is available from the [v0.5.2 release](https://github.com/KHG420/screen-companion/releases/tag/v0.5.2). It uses a test signing key and still requires you to configure your own server address.
+
 ## Self-hosting and supported platforms
 
 This repository does not provide a public test service or a preconfigured server address. Deploy your own signaling service and website, build the Android APK, and enter your server address in the Android app's **Connection settings** (`连接设置`). Configuration templates are in [deploy](deploy/).

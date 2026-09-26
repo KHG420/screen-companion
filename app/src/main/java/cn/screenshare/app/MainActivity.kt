@@ -14,6 +14,8 @@ import android.content.pm.ActivityInfo
 import android.media.projection.MediaProjectionManager
 import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
+import androidx.core.net.toUri
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.compose.BackHandler
@@ -49,14 +51,19 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
@@ -69,15 +76,51 @@ import org.webrtc.VideoTrack
 
 class MainActivity : ComponentActivity() {
     private var pip by mutableStateOf(false)
+    private var requestingOverlay = false
+    var overlayAllowed by mutableStateOf(false)
+        private set
+    override fun onResume() {
+        super.onResume()
+        overlayAllowed = Settings.canDrawOverlays(this)
+        requestingOverlay = false
+    }
+    fun requestInteractiveWindow() {
+        requestingOverlay = true
+        runCatching { startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, "package:$packageName".toUri())) }
+            .onFailure { requestingOverlay = false; CallService.state.value = CallService.state.value.copy(error = "无法打开悬浮窗授权，请到系统设置中允许显示在其他应用上层。") }
+    }
     override fun onPictureInPictureModeChanged(isInPictureInPictureMode: Boolean, newConfig: Configuration) {
         super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
         pip = isInPictureInPictureMode
+    }
+    override fun onStart() {
+        super.onStart()
+        CallService.current?.let { it.uiVisible = true; it.hideCallOverlay(); it.clearMessageNotification() }
+    }
+    override fun onStop() {
+        CallService.current?.uiVisible = false
+        super.onStop()
+    }
+    override fun onUserLeaveHint() {
+        super.onUserLeaveHint()
+        val state = CallService.state.value
+        if (!requestingOverlay && state.active && state.sharing && state.floatingEnabled) showCallWindow(background = false)
+    }
+    fun showCallWindow(background: Boolean = true): Boolean {
+        if (Settings.canDrawOverlays(this) && CallService.current?.showCallOverlay() == true) {
+            if (background) moveTaskToBack(true)
+            return true
+        }
+        if (!packageManager.hasSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE)) return false
+        return runCatching { enterPictureInPictureMode(PictureInPictureParams.Builder()
+            .setAspectRatio(Rational(4, 3)).build()) }.getOrDefault(false)
     }
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
             val callState by CallService.state.collectAsStateWithLifecycle()
+            LaunchedEffect(callState.active) { if (callState.active) CallService.current?.uiVisible = lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED) }
             DisposableEffect(callState.active) {
                 val bars = if (callState.active) SystemBarStyle.dark(0xFF1D2331.toInt())
                     else SystemBarStyle.light(0xFFFFF9F0.toInt(), 0xFF49392D.toInt())
@@ -182,11 +225,15 @@ private fun ScreenShareApp(pip: Boolean) {
     }
     LaunchedEffect(state.active) { if (!state.active) { fullscreen = false; callUi.removeState("call") } }
     LaunchedEffect(state.active, state.remoteSharing, pip) {
-        if (pip && (!state.active || !state.remoteSharing)) (context as Activity).moveTaskToBack(true)
+        if (pip && !state.active) (context as Activity).moveTaskToBack(true)
     }
     BackHandler(fullscreen) { fullscreen = false }
-    val immersive = state.remoteSharing && (fullscreen || pip)
+    val immersive = pip || (state.remoteSharing && fullscreen)
     // Android 15 draws behind navigation bars; paint a stable light backing for system controls.
+    if (pip && state.active) {
+        FloatingCall(state)
+        return
+    }
     Box(Modifier.fillMaxSize().background(Color(0xFFFFF9F0)).navigationBarsPadding().displayCutoutPadding()) {
       Surface(Modifier.fillMaxSize()) {
             Scaffold(
@@ -291,7 +338,7 @@ private fun CallScreen(state: CallState, remoteScreen: @Composable (VideoTrack?,
     var camerasHidden by rememberSaveable { mutableStateOf(false) }
     val unread = state.chatUnread
     var followMessages by remember { mutableStateOf(true) }
-    val immersive = state.remoteSharing && (fullscreen || pip)
+    val immersive = pip || (state.remoteSharing && fullscreen)
     var controlsVisible by remember { mutableStateOf(true) }
     var interaction by remember { mutableIntStateOf(0) }
     LaunchedEffect(fullscreen, interaction) { controlsVisible = true; if (fullscreen) { delay(4000); controlsVisible = false } }
@@ -345,7 +392,7 @@ private fun CallScreen(state: CallState, remoteScreen: @Composable (VideoTrack?,
             if (Build.VERSION.SDK_INT >= 31 && context.checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED)
                 TextButton(onClick = { bluetoothPermission.launch(Manifest.permission.BLUETOOTH_CONNECT) }) { Text("允许使用蓝牙耳机") }
             if (Build.VERSION.SDK_INT >= 33 && context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED)
-                TextButton(onClick = { notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS) }) { Text("允许通话通知") }
+                TextButton(onClick = { notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS) }) { Text("允许通话与新消息通知") }
             state.routes.forEach { route ->
                 TextButton(onClick = { session?.selectRoute(route.id) }) { Text(route.label + if (route.id == state.selectedRoute) " · 正在使用" else "") }
             }
@@ -355,6 +402,25 @@ private fun CallScreen(state: CallState, remoteScreen: @Composable (VideoTrack?,
             }
             if (state.cameraOn || state.remoteCameraOn) TextButton(onClick = { camerasHidden = !camerasHidden }) { Text(if (camerasHidden) "显示摄像头画面" else "收起摄像头画面") }
             if (state.cameraOn) TextButton(onClick = { session?.switchCamera() }) { Text("切换摄像头") }
+            if (state.sharing) {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text("共享时自动悬浮", Modifier.weight(1f))
+                    Switch(state.floatingEnabled, modifier = Modifier.semantics { contentDescription = "共享时自动悬浮" }, onCheckedChange = { enabled -> CallService.state.value = CallService.state.value.copy(floatingEnabled = enabled) })
+                }
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text("悬浮窗显示视频", Modifier.weight(1f))
+                    Switch(state.floatingVideo, modifier = Modifier.semantics { contentDescription = "悬浮窗显示视频" }, onCheckedChange = { enabled -> CallService.state.value = CallService.state.value.copy(floatingVideo = enabled) })
+                }
+                Text("可交互悬浮窗支持聊天、画质、静音和停止共享；收起或关闭小窗不会结束通话。", style = MaterialTheme.typography.bodySmall)
+                if (!(context as MainActivity).overlayAllowed) {
+                    Text("首次使用需允许显示在其他应用上层；未授权时使用只能观看的系统小窗。", style = MaterialTheme.typography.bodySmall)
+                    TextButton(onClick = { context.requestInteractiveWindow() }) { Text("允许可交互悬浮窗") }
+                }
+                TextButton(onClick = {
+                    moreOpen = false
+                    if (!(context as MainActivity).showCallWindow()) CallService.state.value = CallService.state.value.copy(error = "系统未允许悬浮小窗，请在系统设置中允许画中画。")
+                }) { Text("悬浮通话与消息") }
+            }
             if (state.remoteSharing && context.packageManager.hasSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE)) TextButton(onClick = {
                 moreOpen = false
                 val entered = runCatching { (context as Activity).enterPictureInPictureMode(PictureInPictureParams.Builder().setAspectRatio(Rational(16, 9)).build()) }.getOrDefault(false)
@@ -421,10 +487,40 @@ private fun CallScreen(state: CallState, remoteScreen: @Composable (VideoTrack?,
             OutlinedButton(onMute, Modifier.weight(1f), enabled = state.microphoneAvailable || state.connected, contentPadding = PaddingValues(horizontal = 6.dp, vertical = 12.dp)) { Text(if (!state.microphoneAvailable) "开启麦克风" else if (state.muted) "取消静音" else "静音") }
             Button(onClick = { session?.end(notice = "你已结束通话") }, colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error), contentPadding = PaddingValues(horizontal = 14.dp, vertical = 12.dp)) { Text("挂断") }
         }
+        if (!chatOpen && unread > 0) {
+            val latest = state.chatMessages.lastOrNull { !it.mine }
+            Surface(onClick = { followMessages = true; chatOpen = true }, color = MaterialTheme.colorScheme.secondaryContainer, shape = RoundedCornerShape(12.dp)) {
+                Column(Modifier.fillMaxWidth().padding(12.dp).semantics { liveRegion = LiveRegionMode.Polite }) {
+                    Text("对方发来消息 · $unread 条未读", style = MaterialTheme.typography.labelMedium)
+                    Text(latest?.text.orEmpty(), maxLines = 2, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium)
+                }
+            }
+        }
         if (!immersive) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             TextButton(onCamera, enabled = state.cameraOn || (state.connected && state.chatReady)) { Text(if (state.cameraOn) "关闭摄像头" else "摄像头") }
             TextButton(onClick = { followMessages = true; chatOpen = true }) { Text(if (unread > 0) "聊天 · $unread" else "聊天") }
             TextButton(onClick = { moreOpen = true }) { Text("画质与声音") }
+        }
+    }
+}
+
+@Composable
+private fun FloatingCall(state: CallState) {
+    Column(Modifier.fillMaxSize().background(Color(0xFF1D2331))) {
+        val track = when {
+            state.remoteSharing -> state.remoteTrack
+            state.floatingVideo && state.remoteCameraOn -> state.remoteCamera
+            state.floatingVideo && state.cameraOn -> state.localCamera
+            else -> null
+        }
+        Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+            if (track != null) RemoteScreen(track, Modifier.fillMaxSize())
+            else Text(if (state.connected) "正在共享 · 通话中" else "正在恢复连接…", color = Color.White, style = MaterialTheme.typography.bodySmall)
+        }
+        val incoming = state.chatMessages.lastOrNull { !it.mine }
+        Column(Modifier.fillMaxWidth().background(Color(0xFF293345)).padding(8.dp).semantics { liveRegion = LiveRegionMode.Polite }) {
+            Text(if (incoming == null) "新消息会显示在这里" else "对方${if (state.chatUnread > 0) " · ${state.chatUnread} 条未读" else ""}", color = Color(0xFFF2D28D), style = MaterialTheme.typography.labelSmall)
+            if (incoming != null) Text(incoming.text, color = Color.White, maxLines = 3, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall)
         }
     }
 }
@@ -458,9 +554,25 @@ private fun RemoteScreen(track: VideoTrack?, modifier: Modifier, onAspectChanged
         zoom = 1f
         pan = Offset.Zero
     }
-    DisposableEffect(track, renderer) {
-        if (renderer != null) track?.addSink(renderer)
-        onDispose { if (renderer != null) runCatching { track?.removeSink(renderer) } }
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    DisposableEffect(track, renderer, lifecycle) {
+        var attached = false
+        fun syncSink() {
+            val visible = lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
+            if (renderer != null && track != null && visible != attached) {
+                // A call may end while stopped, before lifecycle-aware state collection resumes.
+                attached = if (visible) runCatching { track.addSink(renderer) }.isSuccess
+                    else { runCatching { track.removeSink(renderer) }; false }
+            }
+        }
+        // STARTED includes picture-in-picture; a stopped Activity needs no local frame rendering.
+        val observer = LifecycleEventObserver { _, _ -> syncSink() }
+        lifecycle.addObserver(observer)
+        syncSink()
+        onDispose {
+            lifecycle.removeObserver(observer)
+            if (attached && renderer != null) runCatching { track?.removeSink(renderer) }
+        }
     }
     DisposableEffect(renderer) { onDispose { renderer?.release() } }
     Box(modifier.clip(RoundedCornerShape(0.dp)).onSizeChanged { bounds = it }.pointerInput(track) {

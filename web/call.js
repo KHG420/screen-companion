@@ -59,6 +59,33 @@ export function videoTiming(current, previous) {
   if (Number.isFinite(freezes) && freezes>0) parts.push(`本周期冻结 ${freezes} 次`);
   return parts.join(' · ');
 }
+// Only measured encoder/queue pressure triggers a reduction. A still screen is not a stall.
+export function videoLoad(load, current, previous, fps) {
+  const elapsed = previous && (current.timestamp-previous.timestamp)/1000;
+  const frames = previous && current.framesEncoded-previous.framesEncoded;
+  if (!(elapsed >= 1 && elapsed <= 5 && frames > 0)) return {...load, healthy:0};
+  if (current.totalEncodeTime < previous.totalEncodeTime || current.packetsSent < previous.packetsSent || current.totalPacketSendDelay < previous.totalPacketSendDelay)
+    return {...load,healthy:0};
+  const encode = (current.totalEncodeTime-previous.totalEncodeTime)/frames;
+  const packets = current.packetsSent-previous.packetsSent;
+  const queue = packets > 0 ? (current.totalPacketSendDelay-previous.totalPacketSendDelay)/packets : NaN;
+  if (current.qualityLimitationReason === 'cpu' || encode > .8/fps || queue > .1)
+    return {level:Math.min(2,load.level+1),healthy:0};
+  const healthy = Number.isFinite(encode) && encode >= 0 && encode < .5/fps &&
+    current.qualityLimitationReason === 'none' && (!Number.isFinite(queue) || (queue >= 0 && queue < .03)) && frames/elapsed >= fps*.8;
+  const count = healthy ? load.healthy+1 : 0;
+  return count >= 6 ? {level:Math.max(0,load.level-1),healthy:0} : {...load,healthy:count};
+}
+export function effectiveQuality(q, level) {
+  if (!level) return q;
+  const spatial = !q.resolutionLocked && (q.fpsLocked || q.priority !== 'maintain-resolution');
+  const temporal = !q.fpsLocked && (q.resolutionLocked || q.priority !== 'maintain-framerate');
+  const scale = level === 1 ? .75 : .5;
+  return {...q, width:spatial?Math.max(320,Math.floor(q.width*scale/2)*2):q.width,
+    height:spatial?Math.max(180,Math.floor(q.height*scale/2)*2):q.height,
+    fps:temporal?Math.min(q.fps,Math.max(10,Math.floor(q.fps/(level===1?1.5:3)))):q.fps};
+}
+const cameraFormats = [{width:1280,height:720,fps:30},{width:960,height:540,fps:24},{width:640,height:360,fps:15}];
 export function friendly(error) {
   if (error instanceof ApiError) return error.message;
   if (error?.name === 'AbortError') return '连接超时，请检查网络后重试。';
@@ -74,6 +101,12 @@ export class Call {
     this.state = { status: '正在连接', connected: false, sharing: false, remoteSharing: false, muted: true, micAvailable: false, micBusy: false, micIssue: '', systemMuted: false, cameraOn: false, cameraBusy: false, remoteCameraOn: false, chatReady: false, messages: [], busy: false, quality: { ...qualities.hd }, qualityBusy: false };
     this.abort = new AbortController(); this.pendingIce = []; this.sendChain = Promise.resolve(); this.closed = false;
     this.videoSamples = new Map(); this.statsTimer = null; this.connectionTimer = null; this.reconnectTimer = null;
+    this.screenLoad = {level:0,healthy:0}; this.cameraLoad = {level:0,healthy:0};
+    this.networkAvailable = () => {
+      if (!this.closed && !this.state.connected && this.retryConnection) {
+        clearTimeout(this.reconnectTimer); this.reconnectTimer=setTimeout(this.retryConnection,0);
+      }
+    };
   }
   update(patch) { if (!this.closed) { Object.assign(this.state, patch); this.changed(this.state); } }
   path(suffix = '') { return `/v1/rooms/${this.credentials.roomId}${suffix}`; }
@@ -112,6 +145,8 @@ export class Call {
         await this.configureScreenCodecs(this.video);
         if (this.closed) return;
         this.cameraVideo = this.pc.addTransceiver('video', { direction: 'sendrecv' });
+        await this.configureScreenCodecs(this.cameraVideo, {...cameraFormats[(navigator.deviceMemory <= 4 || navigator.hardwareConcurrency <= 4)?1:0],bitrate:2_000_000});
+        if (this.closed) return;
         this.bindChannel(this.pc.createDataChannel('companion-v1', { ordered:true }));
       }
       this.pc.ondatachannel = ({channel}) => this.bindChannel(channel);
@@ -121,23 +156,24 @@ export class Call {
         this.update(track.kind !== 'video' ? {remoteAudio:track} : videos.indexOf(transceiver) === 1 ? {remoteCamera:track} : {remoteVideo:track});
       };
       this.pc.onconnectionstatechange = () => this.connectionChanged();
+      globalThis.addEventListener?.('online',this.networkAvailable);
       this.update({ roomId: this.credentials.roomId, role: this.credentials.role, hasTurn: this.credentials.hasTurn,
         status: this.credentials.role === 'host' ? '等待对方加入' : '正在连接语音' });
       if (this.credentials.role === 'guest') this.armDeadline();
-      this.poll(); this.statsTimer = setInterval(() => this.stats(), 3000);
+      this.poll(); this.statsTimer = setInterval(() => this.stats(), 2000);
     } catch (error) { if (!this.closed) this.fail(friendly(error)); }
   }
-  async configureScreenCodecs(video) {
+  async configureScreenCodecs(video, quality = this.state.quality) {
     // Probe the negotiated quality, so lower-power devices need not support 4K60
     // to use efficient encoding at 720p/1080p. Live quality changes keep the codec.
     // Keep every offered codec: unsupported peers can still negotiate a fallback.
     if (!video.setCodecPreferences || !globalThis.RTCRtpSender?.getCapabilities || !navigator.mediaCapabilities?.encodingInfo || !navigator.mediaCapabilities?.decodingInfo) return;
     try {
-      const {width,height,fps,bitrate}=this.state.quality;
+      const {width,height,fps,bitrate}=quality;
       const key=`${width}/${height}/${fps}/${bitrate}`;
-      if (!this.screenCodecs || this.screenCodecQuality !== key) {
-        this.screenCodecQuality=key;
-        this.screenCodecs = (async () => {
+      this.videoCodecs ??= new Map();
+      if (!this.videoCodecs.has(key)) {
+        this.videoCodecs.set(key, (async () => {
           const codecs = RTCRtpSender.getCapabilities('video')?.codecs || [];
           const candidates=codecs.filter(c=>c.mimeType.toLowerCase()==='video/h264' && /(?:^|;)\s*packetization-mode=1(?:;|$)/i.test(c.sdpFmtpLine || ''));
           const usable=(await Promise.all(candidates.map(async codec=>{
@@ -154,9 +190,9 @@ export class Call {
           usable.sort((a,b)=>Number(b.efficient)-Number(a.efficient));
           const preferred=usable.map(x=>x.codec);
           return [...preferred,...codecs.filter(c=>!preferred.includes(c))];
-        })();
+        })());
       }
-      const codecs=await this.screenCodecs;
+      const codecs=await this.videoCodecs.get(key);
       if (!this.closed && codecs) video.setCodecPreferences(codecs);
     } catch { /* Capability probing and optional codec preferences must not prevent a call. */ }
   }
@@ -197,7 +233,11 @@ export class Call {
         await this.configureScreenCodecs(this.video);
         if (this.closed) return;
         this.cameraVideo = this.pc.getTransceivers().filter(t => t.receiver.track.kind === 'video')[1];
-        if (this.cameraVideo) this.cameraVideo.direction = 'sendrecv';
+        if (this.cameraVideo) {
+          this.cameraVideo.direction = 'sendrecv';
+          await this.configureScreenCodecs(this.cameraVideo, {...cameraFormats[(navigator.deviceMemory <= 4 || navigator.hardwareConcurrency <= 4)?1:0],bitrate:2_000_000});
+          if (this.closed) return;
+        }
         await this.flushIce();
         await this.pc.setLocalDescription(await this.pc.createAnswer());
         await this.signal('answer', { sdp: this.pc.localDescription.sdp }); break;
@@ -235,15 +275,24 @@ export class Call {
     const state = this.pc.connectionState;
     if (state === 'connected') {
       clearTimeout(this.connectionTimer); clearTimeout(this.reconnectTimer); this.reconnectTimer = null;
+      this.retryConnection = null;
       this.update({ connected: true, status: '语音已连接' });
     } else if (state === 'disconnected' || state === 'failed') {
       this.update({ connected: false, status: '正在恢复通话' });
       if (this.reconnectTimer === null) {
         this.armDeadline();
-        this.reconnectTimer = setTimeout(() => {
-          if (this.closed) return;
-          (this.credentials.role === 'host' ? this.offer(true) : this.signal('restart', {})).catch(e => this.fail(friendly(e)));
-        }, 2000);
+        let attempts = 0, running = false;
+        const retry = async () => {
+          if (this.closed || this.state.connected || running || this.retryConnection !== retry || attempts >= 3) return;
+          running = true;
+          attempts++;
+          try { await (this.credentials.role === 'host' ? this.offer(true) : this.signal('restart', {})); }
+          catch { /* A following bounded retry can recover a transient negotiation failure. */ }
+          finally { running = false; }
+          if (!this.closed && !this.state.connected && this.retryConnection === retry && attempts < 3) this.reconnectTimer = setTimeout(retry, 6000);
+        };
+        this.retryConnection = retry;
+        this.reconnectTimer = setTimeout(retry, state === 'failed' ? 0 : 1500);
       }
     }
   }
@@ -287,14 +336,24 @@ export class Call {
     this.update({cameraBusy:true,error:''});
     let stream;
     try {
-      stream = await navigator.mediaDevices.getUserMedia({video:{width:{ideal:1280,max:1280},height:{ideal:720,max:720},frameRate:{ideal:30,max:30}},audio:false});
+      this.cameraLoad = {level:(navigator.deviceMemory <= 4 || navigator.hardwareConcurrency <= 4)?1:0,healthy:0};
+      const format = cameraFormats[this.cameraLoad.level];
+      stream = await navigator.mediaDevices.getUserMedia({video:{width:{ideal:format.width,max:format.width},height:{ideal:format.height,max:format.height},frameRate:{ideal:format.fps,max:format.fps}},audio:false});
       if (this.closed) { stream.getTracks().forEach(t=>t.stop()); return; }
       this.camera = stream;
       const track = stream.getVideoTracks()[0];
-      await this.cameraVideo.sender.replaceTrack(track);
+      track.contentHint = 'motion';
       const p = this.cameraVideo.sender.getParameters();
-      for (const e of p.encodings || []) { e.maxBitrate=2000000; e.maxFramerate=30; }
+      p.degradationPreference = 'maintain-framerate';
+      // Relative allocation matters only when another local sender competes.
+      // Leave screen locks intact and let camera resolution adapt first.
+      for (const e of p.encodings || []) { e.maxBitrate=2000000; e.maxFramerate=format.fps; e.priority='very-low'; }
       if (p.encodings?.length) await this.cameraVideo.sender.setParameters(p);
+      if (this.closed || this.camera !== stream) { stream.getTracks().forEach(t=>t.stop()); return; }
+      if (track.readyState === 'ended') throw new Error('摄像头已断开');
+      await this.cameraVideo.sender.replaceTrack(track);
+      if (this.closed || this.camera !== stream) { stream.getTracks().forEach(t=>t.stop()); return; }
+      if (track.readyState === 'ended') throw new Error('摄像头已断开');
       track.onended = () => this.stopCamera();
       this.update({cameraOn:true,localCamera:track});
       this.sendCameraState();
@@ -306,6 +365,7 @@ export class Call {
   }
   async stopCamera() {
     this.camera?.getTracks().forEach(t=>{t.onended=null;t.stop();}); this.camera=null;
+    this.cameraLoad = {level:0,healthy:0}; this.videoSamples.clear();
     if (!this.closed) {
       await this.cameraVideo?.sender.replaceTrack(null).catch(()=>{});
       this.update({cameraOn:false,localCamera:null}); this.sendCameraState();
@@ -349,16 +409,18 @@ export class Call {
   }
   async quality(value) {
     const q = validateQuality(typeof value === 'string' ? qualities[value] : value);
-    if (this.closed || this.state.busy || this.state.qualityBusy) throw new Error('共享状态正在变化，请稍后调整。');
+    if (this.closed || this.state.busy || this.state.qualityBusy || this.adjustingMedia) throw new Error('共享状态正在变化，请稍后调整。');
     const previous = this.state.quality;
     this.update({ qualityBusy:true });
     try {
       if (this.display) await this.encoding(q);
       if (this.closed) return;
+      this.screenLoad = {level:0,healthy:0};
+      this.videoSamples.clear();
       this.update({ quality:q, qualityNote:this.display ? this.captureNote(q) : '', error:'' });
     } catch (error) {
       if (!this.closed && this.display) {
-        try { await this.encoding(previous); }
+        try { await this.encoding(effectiveQuality(previous,this.screenLoad.level)); }
         catch { await this.stopSharing(); }
       }
       throw new Error('画质未应用，已保留原设置；设备可能不支持该组合。' + friendly(error));
@@ -371,6 +433,7 @@ export class Call {
     return smaller ? '采集源低于目标尺寸：不会将低分辨率画面放大冒充 4K。请检查共享源和浏览器采集能力。' : '';
   }
   async encoding(q = this.state.quality) {
+    const capture = this.display;
     const track = this.display?.getVideoTracks()[0];
     if (track) {
       const bounds = captureBounds(q, track.getSettings());
@@ -382,6 +445,7 @@ export class Call {
       if (Object.keys(next).some(key => current[key]?.ideal !== next[key].ideal || current[key]?.max !== next[key].max)) {
         await track.applyConstraints(next);
       }
+      if (this.closed || this.display !== capture) return;
     }
     if (this.video?.sender) {
       const p = this.video.sender.getParameters();
@@ -412,13 +476,17 @@ export class Call {
       await this.request('POST', this.path('/share'), { enabled: true }); reserved = true;
       if (this.closed) { capture.getTracks().forEach(t => t.stop()); return; }
       this.display = capture;
+      this.videoSamples.clear();
+      this.screenLoad = {level:(navigator.deviceMemory <= 4 || navigator.hardwareConcurrency <= 4) && !(this.state.quality.resolutionLocked && this.state.quality.fpsLocked)?1:0,healthy:0};
       const track = capture.getVideoTracks()[0];
       if (track.readyState === 'ended') throw new Error('屏幕共享已取消，请重新选择。');
       // Configure capture and negotiated sender limits before the first frame is attached.
-      await this.encoding();
-      if (this.closed) return;
+      await this.encoding(effectiveQuality(this.state.quality,this.screenLoad.level));
+      if (this.closed || this.display !== capture) return;
       if (track.readyState === 'ended') throw new Error('屏幕共享已取消，请重新选择。');
       await this.video.sender.replaceTrack(track);
+      if (this.closed || this.display !== capture) return;
+      if (track.readyState === 'ended') throw new Error('屏幕共享已取消，请重新选择。');
       const sound = capture.getAudioTracks();
       if (sound.length) {
         this.displaySource = this.audio.createMediaStreamSource(new MediaStream(sound));
@@ -426,7 +494,7 @@ export class Call {
         sound[0].onended = () => this.update({systemAudio:false});
       }
       track.onended = () => this.stopSharing();
-      this.update({ sharing: true, localVideo: track, systemAudio: sound.length > 0, systemMuted:false, busy: false, qualityNote:this.captureNote(this.state.quality) });
+      this.update({ sharing: true, localVideo: track, systemAudio: sound.length > 0, systemMuted:false, busy: false, qualityNote:this.captureNote(effectiveQuality(this.state.quality,this.screenLoad.level)) });
     } catch (error) {
       capture?.getTracks().forEach(t => t.stop()); this.stopCapture();
       if (!this.closed && reserved) {
@@ -440,6 +508,7 @@ export class Call {
     this.displaySource?.disconnect(); this.displaySource = null;
     this.displayGain?.disconnect(); this.displayGain = null;
     this.display?.getTracks().forEach(t => { t.onended = null; t.stop(); }); this.display = null;
+    this.screenLoad = {level:0,healthy:0}; this.videoSamples.clear();
     if (!this.closed && this.video) this.video.sender.replaceTrack(null).catch(() => {});
   }
   async stopSharing() {
@@ -449,23 +518,26 @@ export class Call {
     catch { if (!this.closed) this.fail('画面已停止，但共享状态同步失败，请重新加入。'); }
   }
   async stats() {
-    if (this.closed || !this.pc) return;
+    if (this.closed || !this.pc || this.statsBusy) return;
+    this.statsBusy = true;
     try {
       const report = await this.pc.getStats();
       const transport = [...report.values()].find(s => s.type === 'transport' && s.selectedCandidatePairId);
       const pair = report.get(transport?.selectedCandidatePairId) || [...report.values()].find(s => s.type === 'candidate-pair' && s.state === 'succeeded' && s.nominated);
       const lines = [];
       for (const direction of ['outbound-rtp','inbound-rtp']) {
-        const active = direction === 'outbound-rtp' ? this.state.sharing : this.state.remoteSharing;
-        const rows = [...report.values()].filter(r=>r.type===direction && r.kind==='video' && !r.isRemote && r.mid === this.video?.mid);
+        const rows = [...report.values()].filter(r=>r.type===direction && r.kind==='video' && !r.isRemote && r.mid != null && (r.mid === this.video?.mid || r.mid === this.cameraVideo?.mid));
         for (const r of rows) {
+          const camera = r.mid === this.cameraVideo?.mid;
+          const active = direction === 'outbound-rtp' ? (camera ? this.state.cameraOn : this.state.sharing) : (camera ? this.state.remoteCameraOn : this.state.remoteSharing);
           const previous=this.videoSamples.get(r.id);
           const rate=videoRate(r,previous);this.videoSamples.set(r.id,{...r,...rate});
+          if (active && direction === 'outbound-rtp') await this.adaptMedia(camera, r, previous);
           if (!active || !r.frameWidth) continue;
           const why={cpu:'设备编码性能受限',bandwidth:'网络带宽受限',other:'编码器调整中'}[r.qualityLimitationReason];
-          lines.push(`${direction==='outbound-rtp'?'发送':'接收'} ${r.frameWidth}×${r.frameHeight} · ${rate.fps===null?'测量中':rate.fps.toFixed(1)+' FPS'} · ${rate.mbps===null?'测量中':rate.mbps.toFixed(2)+' Mbps'}${why?' · '+why:''}`);
+          lines.push(`${camera?'摄像头':'屏幕'}${direction==='outbound-rtp'?'发送':'接收'} ${r.frameWidth}×${r.frameHeight} · ${rate.fps===null?'测量中':rate.fps.toFixed(1)+' FPS'} · ${rate.mbps===null?'测量中':rate.mbps.toFixed(2)+' Mbps'}${why?' · '+why:''}`);
           const timing=videoTiming(r,previous);if(timing)lines.push(timing);
-          if (direction === 'outbound-rtp') {
+          if (direction === 'outbound-rtp' && !camera) {
             const q=this.state.quality, source=this.display?.getVideoTracks()[0]?.getSettings() || {};
             if (q.resolutionLocked && source.width && source.height && (Math.max(r.frameWidth,r.frameHeight)<Math.max(source.width,source.height) || Math.min(r.frameWidth,r.frameHeight)<Math.min(source.width,source.height)))
               lines.push('实际发送尺寸低于锁定采集尺寸；请检查设备能力与网络，设置未被改写');
@@ -474,16 +546,58 @@ export class Call {
           }
         }
       }
+      if (this.screenLoad.level && this.state.sharing) lines.push('正在减轻共享采集负担，稳定后逐级恢复；手动锁定不变');
+      if (this.cameraLoad.level && this.state.cameraOn) lines.push('摄像头已降低采集负担，稳定后逐级恢复清晰度');
       const patch={mediaStats:lines.join('；') || ((this.state.sharing||this.state.remoteSharing)?'正在测量视频…':'')};
       if (!pair) {this.update(patch);return;}
       const relay = [report.get(pair.localCandidateId), report.get(pair.remoteCandidateId)].some(c => c?.candidateType === 'relay');
       this.update({ ...patch, network: `${relay ? '中转连接' : '直接连接'}${pair.currentRoundTripTime == null ? '' : ` · 网络往返 ${Math.round(pair.currentRoundTripTime * 1000)} ms`}` });
     } catch { /* Statistics do not control call lifetime. */ }
+    finally { this.statsBusy = false; }
+  }
+  async adaptMedia(camera, current, previous) {
+    if (this.closed || !this.state.connected || this.state.busy || this.state.qualityBusy || this.state.cameraBusy) return;
+    const key = camera ? 'cameraLoad' : 'screenLoad', old = this[key];
+    if (performance.now() < (this[key+'RetryAt'] || 0)) return;
+    const target = camera ? cameraFormats[old.level] : effectiveQuality(this.state.quality,old.level);
+    const next = videoLoad(old,current,previous,target.fps);
+    if (next.level === old.level) { this[key]=next; return; }
+    if (!camera && this.state.quality.resolutionLocked && this.state.quality.fpsLocked) return;
+    const stream = camera ? this.camera : this.display;
+    if (!stream) return;
+    this.adjustingMedia = true;
+    const apply = async level => {
+      if (!camera) return this.encoding(effectiveQuality(this.state.quality,level));
+      const track=stream.getVideoTracks()[0], q=cameraFormats[level];
+      await track.applyConstraints({width:{ideal:q.width,max:q.width},height:{ideal:q.height,max:q.height},frameRate:{ideal:q.fps,max:q.fps}});
+      if (this.closed || this.camera !== stream) return;
+      const p=this.cameraVideo.sender.getParameters();
+      for (const e of p.encodings || []) e.maxFramerate=q.fps;
+      if (p.encodings?.length) await this.cameraVideo.sender.setParameters(p);
+    };
+    try {
+      await apply(next.level);
+      if (!this.closed && (camera?this.camera:this.display)===stream) this[key]=next;
+    } catch {
+      if (!this.closed && (camera?this.camera:this.display)===stream) {
+        try { await apply(old.level); } catch {
+          if (!this.closed && (camera?this.camera:this.display)===stream) {
+            await (camera ? this.stopCamera() : this.stopSharing());
+            this.update({error:camera?'摄像头调整失败，已停止视频，请重新开启。':'共享画质调整失败，已停止共享，请重新开启。'});
+          }
+          return;
+        }
+        if (this.closed || (camera?this.camera:this.display)!==stream) return;
+        this[key]={...old,healthy:0};
+        this[key+'RetryAt']=performance.now()+15000;
+      }
+    } finally { this.adjustingMedia = false; }
   }
   fail(message) { this.end(message, true, true); }
   end(message = '通话已结束', notify = true, error = false) {
     if (this.closed) return;
     this.closed = true; this.abort.abort();
+    globalThis.removeEventListener?.('online',this.networkAvailable); this.retryConnection = null;
     clearInterval(this.statsTimer); clearTimeout(this.connectionTimer); clearTimeout(this.reconnectTimer);
     this.stopCamera(); this.channel?.close(); this.stopCapture(); this.mic?.getTracks().forEach(t => { t.onended = null; t.stop(); });
     this.mix?.stream.getTracks().forEach(t => t.stop()); this.pc?.close(); this.audio?.close().catch(() => {});

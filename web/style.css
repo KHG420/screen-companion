@@ -34,7 +34,6 @@ h1{font-family:"Tongping Title","PingFang SC",sans-serif;font-weight:400}
 .camera-grid figure{margin:0;min-width:0;width:160px;background:#10151f;border:1px solid #394355;border-radius:8px;overflow:hidden}
 .camera-grid video{height:96px;object-fit:contain;display:block}
 .camera-grid figcaption{padding:4px 8px;font-size:12px;color:#b6c0cf}
-#local-camera{transform:scaleX(-1)}
 .camera-only .camera-grid{position:static;max-width:100%;width:100%;height:100%;padding:24px;align-items:center;justify-content:center}
 .camera-only .camera-grid figure{width:50%;border:0}
 .camera-only .camera-grid video{height:auto;max-height:calc(100dvh - 350px);min-height:160px}

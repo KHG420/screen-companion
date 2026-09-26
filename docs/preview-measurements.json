@@ -1,0 +1,50 @@
+{
+  "date": "2026-09-26",
+  "method": "Chrome canvas 1280x720 at 30 fps; actual app render; 2-second playback frame deltas, not CPU or network measurements",
+  "before": {
+    "visible": {
+      "paused": false,
+      "frames": 60,
+      "trackLive": "live",
+      "trackEnabled": true,
+      "screenPaused": false
+    },
+    "hidden": {
+      "paused": false,
+      "frames": 61,
+      "trackLive": "live",
+      "trackEnabled": true,
+      "screenPaused": false
+    },
+    "restored": {
+      "paused": false,
+      "frames": 61,
+      "trackLive": "live",
+      "trackEnabled": true,
+      "screenPaused": false
+    }
+  },
+  "after": {
+    "visible": {
+      "paused": false,
+      "frames": 59,
+      "trackLive": "live",
+      "trackEnabled": true,
+      "screenPaused": false
+    },
+    "hidden": {
+      "paused": true,
+      "frames": 0,
+      "trackLive": "live",
+      "trackEnabled": true,
+      "screenPaused": false
+    },
+    "restored": {
+      "paused": false,
+      "frames": 60,
+      "trackLive": "live",
+      "trackEnabled": true,
+      "screenPaused": false
+    }
+  }
+}

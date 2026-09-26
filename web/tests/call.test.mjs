@@ -257,3 +257,188 @@ test('unsupported or ignored browser lock rejects and restores previous quality 
     assert.equal(params.degradationPreference,'maintain-resolution');assert.equal(c.state.qualityBusy,false);
   }
 });
+
+test('camera applies motion adaptation and lower relative bandwidth before its first frame',async()=>{
+  const old=Object.getOwnPropertyDescriptor(globalThis,'navigator');const order=[];let params={encodings:[{}]};
+  const track={stop(){},readyState:'live'},stream={getVideoTracks:()=>[track],getTracks:()=>[track]};
+  Object.defineProperty(globalThis,'navigator',{configurable:true,value:{mediaDevices:{getUserMedia:async()=>stream}}});
+  try {
+    const c=new Call('/api');c.state.connected=c.state.chatReady=true;
+    c.cameraVideo={sender:{getParameters:()=>structuredClone(params),setParameters:async p=>{params=p;order.push('parameters');},replaceTrack:async t=>{order.push(t?'attach':'detach');}}};
+    await c.toggleCamera();assert.equal(c.state.cameraOn,true);assert.deepEqual(order,['parameters','attach']);
+    assert.equal(track.contentHint,'motion');assert.equal(params.degradationPreference,'maintain-framerate');
+    assert.equal(params.encodings[0].priority,'very-low');assert.equal(params.encodings[0].maxBitrate,2_000_000);assert.equal(params.encodings[0].maxFramerate,30);
+    assert.equal(c.state.quality.resolutionLocked,true);
+    await c.stopCamera();assert.equal(c.state.cameraOn,false);
+  }finally{if(old)Object.defineProperty(globalThis,'navigator',old);else delete globalThis.navigator;}
+});
+
+test('camera codec probe uses 720p independently of a locked 4K screen',async()=>{
+  const old=Object.getOwnPropertyDescriptor(globalThis,'navigator'),oldSender=globalThis.RTCRtpSender;
+  const codecs=[{mimeType:'video/VP8'},{mimeType:'video/H264',sdpFmtpLine:'packetization-mode=1;profile-level-id=42e01f'}];let probes=0,preferred;
+  const probe=async ({video})=>{probes++;return {supported:video.width<=1280,smooth:true,powerEfficient:true};};
+  globalThis.RTCRtpSender={getCapabilities:()=>({codecs})};Object.defineProperty(globalThis,'navigator',{configurable:true,value:{mediaCapabilities:{encodingInfo:probe,decodingInfo:probe}}});
+  try {
+    const c=new Call('/api'),video={setCodecPreferences:p=>preferred=p};await c.quality('uhd60');
+    await c.configureScreenCodecs(video);assert.equal(preferred,undefined);
+    await c.configureScreenCodecs(video,{width:1280,height:720,fps:30,bitrate:2_000_000});assert.deepEqual(preferred,[codecs[1],codecs[0]]);
+    await c.configureScreenCodecs(video);assert.equal(probes,4);assert.equal(c.state.quality.width,3840);
+  }finally{globalThis.RTCRtpSender=oldSender;if(old)Object.defineProperty(globalThis,'navigator',old);else delete globalThis.navigator;}
+});
+
+test('camera-only stats show actual rates without screen lock warnings',async()=>{
+  const c=new Call('/api');c.cameraVideo={mid:'2'};c.video={mid:'1'};c.state.cameraOn=c.state.remoteCameraOn=true;
+  let time=1000; c.pc={getStats:async()=>new Map([
+    ['out',{id:'out',type:'outbound-rtp',kind:'video',mid:'2',timestamp:time,bytesSent:time*250,framesEncoded:time*.03,frameWidth:1280,frameHeight:720}],
+    ['in',{id:'in',type:'inbound-rtp',kind:'video',mid:'2',timestamp:time,bytesReceived:time*250,framesDecoded:time*.03,frameWidth:1280,frameHeight:720}]
+  ])};
+  await c.stats();time=4000;await c.stats();
+  assert.match(c.state.mediaStats,/摄像头发送 1280×720 · 30.0 FPS · 2.00 Mbps/);assert.match(c.state.mediaStats,/摄像头接收/);
+  assert.doesNotMatch(c.state.mediaStats,/锁定|屏幕/);
+  c.state.cameraOn=c.state.remoteCameraOn=false;await c.stats();assert.equal(c.state.mediaStats,'');
+});
+
+test('hangup during camera parameter application cannot attach a late track',async()=>{
+  const old=Object.getOwnPropertyDescriptor(globalThis,'navigator');let release,attached=false,stopped=0;
+  const track={stop(){stopped++;}},stream={getVideoTracks:()=>[track],getTracks:()=>[track]};
+  Object.defineProperty(globalThis,'navigator',{configurable:true,value:{mediaDevices:{getUserMedia:async()=>stream}}});
+  try {
+    const c=new Call('/api');c.state.connected=c.state.chatReady=true;
+    c.cameraVideo={sender:{getParameters:()=>({encodings:[{}]}),setParameters:()=>new Promise(r=>release=r),replaceTrack:async t=>{if(t)attached=true;}}};
+    const pending=c.toggleCamera();await Promise.resolve();c.end();release();await pending;
+    assert.equal(attached,false);assert.ok(stopped>0);assert.equal(c.closed,true);
+  }finally{if(old)Object.defineProperty(globalThis,'navigator',old);else delete globalThis.navigator;}
+});
+
+test('load responds to encoder or queue pressure, ignores still/reset samples and recovers slowly',async()=>{
+  const {videoLoad}=await import('../call.js');
+  const a={timestamp:1000,framesEncoded:30,totalEncodeTime:.1,packetsSent:100,totalPacketSendDelay:.1};
+  const b={timestamp:3000,framesEncoded:90,totalEncodeTime:.5,packetsSent:300,totalPacketSendDelay:.2,qualityLimitationReason:'none'};
+  assert.deepEqual(videoLoad({level:0,healthy:0},{...b,qualityLimitationReason:'cpu'},a,30),{level:1,healthy:0});
+  assert.equal(videoLoad({level:1,healthy:0},{...b,totalPacketSendDelay:40},a,30).level,2);
+  assert.equal(videoLoad({level:0,healthy:0},{...b,totalEncodeTime:3},a,30).level,1);
+  for(const patch of [{framesEncoded:30},{timestamp:9000},{totalEncodeTime:0},{framesEncoded:0}])
+    assert.deepEqual(videoLoad({level:1,healthy:5},{...b,...patch,qualityLimitationReason:'cpu'},a,30),{level:1,healthy:0});
+  let load={level:2,healthy:0};
+  for(let i=0;i<5;i++)load=videoLoad(load,b,a,30);
+  assert.equal(load.level,2);load=videoLoad(load,b,a,30);assert.equal(load.level,1);
+  assert.equal(videoLoad(load,{...b,qualityLimitationReason:'bandwidth'},a,30).healthy,0);
+});
+
+test('adaptive effective quality preserves manual locks, selected priority and user target',async()=>{
+  const {effectiveQuality,qualities}=await import('../call.js');
+  for(const priority of ['balanced','maintain-resolution','maintain-framerate'])
+    for(const resolutionLocked of [false,true])for(const fpsLocked of [false,true]){
+      const q={...qualities.uhd60,priority,resolutionLocked,fpsLocked},before={...q};
+      for(const level of [0,1,2]){
+        const actual=effectiveQuality(q,level);assert.deepEqual(q,before);
+        if(resolutionLocked)assert.equal(actual.width,q.width);
+        if(fpsLocked)assert.equal(actual.fps,q.fps);
+        if(resolutionLocked&&fpsLocked)assert.deepEqual(actual,q);
+        assert.equal(actual.bitrate,q.bitrate);assert.equal(actual.width%2,0);assert.ok(actual.fps<=q.fps);
+      }
+    }
+  const q=effectiveQuality({...qualities.hd,fps:1},2);assert.equal(q.fps,1);
+});
+
+test('automatic screen reduction restores on failure and never rewrites the selected target',async()=>{
+  const {qualities}=await import('../call.js');const c=new Call('/api');let constraints={},params={encodings:[{}]},reject=false;
+  const track={getSettings:()=>({width:2560,height:1440}),getConstraints:()=>constraints,applyConstraints:async p=>{constraints=p;}};
+  c.state.connected=c.state.sharing=true;c.display={getVideoTracks:()=>[track]};
+  c.video={sender:{getParameters:()=>structuredClone(params),setParameters:async p=>{if(reject&&p.encodings[0].maxFramerate===10)throw Error('rejected');params=p;}}};
+  const a={timestamp:1000,framesEncoded:30,totalEncodeTime:.1,packetsSent:100,totalPacketSendDelay:.1};
+  const b={timestamp:3000,framesEncoded:90,totalEncodeTime:3,packetsSent:300,totalPacketSendDelay:.2,qualityLimitationReason:'cpu'};
+  await c.adaptMedia(false,b,a);assert.equal(c.screenLoad.level,1);assert.equal(constraints.frameRate.max,20);assert.equal(constraints.width.max,2560);
+  assert.deepEqual(c.state.quality,qualities.hd);reject=true;
+  await c.adaptMedia(false,b,a);assert.equal(c.screenLoad.level,1);assert.equal(constraints.frameRate.max,20);assert.equal(c.closed,false);
+  c.state.quality={...qualities.hd,fpsLocked:true};await c.adaptMedia(false,b,a);assert.equal(constraints.frameRate.max,20);
+});
+
+test('reconnect is debounced, bounded, cancelled on success and immediate for failed ICE',async()=>{
+  const originalSet=globalThis.setTimeout,originalClear=globalThis.clearTimeout;let id=0;const timers=new Map();
+  globalThis.setTimeout=(fn,ms)=>{timers.set(++id,{fn,ms});return id;};globalThis.clearTimeout=id=>timers.delete(id);
+  try {
+    const c=new Call('/api');let offers=0;c.credentials={role:'host'};c.pc={connectionState:'disconnected',close(){}};c.offer=async()=>{offers++;};
+    c.connectionChanged();const deadline=c.connectionTimer,first=c.reconnectTimer;
+    assert.equal(timers.get(first).ms,1500);c.connectionChanged();assert.equal(c.connectionTimer,deadline);assert.equal(c.reconnectTimer,first);
+    await timers.get(first).fn();assert.equal(offers,1);assert.equal(timers.get(c.reconnectTimer).ms,6000);
+    c.networkAvailable();assert.equal(timers.get(c.reconnectTimer).ms,0);assert.equal(c.connectionTimer,deadline);
+    await timers.get(c.reconnectTimer).fn();await timers.get(c.reconnectTimer).fn();assert.equal(offers,3);assert.equal(c.connectionTimer,deadline);
+    c.pc.connectionState='connected';c.connectionChanged();assert.equal(c.reconnectTimer,null);assert.equal(timers.has(deadline),false);
+    c.pc.connectionState='failed';c.connectionChanged();assert.equal(timers.get(c.reconnectTimer).ms,0);
+    const pending=timers.get(c.reconnectTimer).fn;c.end('',false);await pending();assert.equal(offers,3);
+  } finally {globalThis.setTimeout=originalSet;globalThis.clearTimeout=originalClear;}
+});
+
+test('low-capability hints start camera gently and unsupported adaptation is not retried every tick',async()=>{
+  const old=Object.getOwnPropertyDescriptor(globalThis,'navigator');let initial,applications=0;
+  const track={contentHint:'',stop(){},applyConstraints:async()=>{applications++;if(applications===1)throw Error('unsupported');}};
+  const stream={getTracks:()=>[track],getVideoTracks:()=>[track]};
+  Object.defineProperty(globalThis,'navigator',{configurable:true,value:{deviceMemory:2,hardwareConcurrency:2,mediaDevices:{getUserMedia:async q=>{initial=q;return stream;}}}});
+  try {
+    const c=new Call('/api');c.state.connected=c.state.chatReady=true;let params={encodings:[{}]};
+    c.cameraVideo={sender:{getParameters:()=>structuredClone(params),setParameters:async p=>{params=p;},replaceTrack:async()=>{}}};
+    await c.toggleCamera();assert.equal(initial.video.width.max,960);assert.equal(initial.video.frameRate.max,24);assert.equal(params.encodings[0].maxFramerate,24);
+    const a={timestamp:1000,framesEncoded:1,totalEncodeTime:0},b={timestamp:3000,framesEncoded:31,totalEncodeTime:2,qualityLimitationReason:'cpu'};
+    await c.adaptMedia(true,b,a);const attempts=applications;await c.adaptMedia(true,b,a);assert.equal(applications,attempts);assert.equal(c.cameraLoad.level,1);assert.equal(c.closed,false);
+  }finally{if(old)Object.defineProperty(globalThis,'navigator',old);else delete globalThis.navigator;}
+});
+
+test('old reconnect completion cannot replace the next recovery timer',async()=>{
+  const set=globalThis.setTimeout,clear=globalThis.clearTimeout;let id=0,release;const timers=new Map();
+  globalThis.setTimeout=(fn,ms)=>{timers.set(++id,{fn,ms});return id;};globalThis.clearTimeout=id=>timers.delete(id);
+  try {
+    const c=new Call('/api');c.credentials={role:'host'};c.pc={connectionState:'failed'};
+    c.offer=()=>new Promise(r=>release=r);c.connectionChanged();const pending=timers.get(c.reconnectTimer).fn();
+    c.pc.connectionState='connected';c.connectionChanged();c.pc.connectionState='failed';c.connectionChanged();
+    const next=c.reconnectTimer;release();await pending;assert.equal(c.reconnectTimer,next);
+  }finally{globalThis.setTimeout=set;globalThis.clearTimeout=clear;}
+});
+
+for(const camera of [true,false]) test(`${camera?'camera':'screen'} ending during attachment never becomes active`,async()=>{
+  const old=Object.getOwnPropertyDescriptor(globalThis,'navigator');
+  const track={readyState:'live',stop(){this.readyState='ended';}},stream={getTracks:()=>[track],getVideoTracks:()=>[track],getAudioTracks:()=>[]};
+  Object.defineProperty(globalThis,'navigator',{configurable:true,value:{mediaDevices:{getUserMedia:async()=>stream,getDisplayMedia:async()=>stream}}});
+  try{
+    const c=new Call('/api');c.credentials={room:'test'};c.state.connected=c.state.chatReady=true;c.request=async()=>({});c.encoding=async()=>{};
+    const sender={getParameters:()=>({encodings:[]}),replaceTrack:async t=>{if(t)t.readyState='ended';}};
+    c.cameraVideo={sender};c.video={sender};await (camera?c.toggleCamera():c.share());
+    assert.equal(camera?c.state.cameraOn:c.state.sharing,false);assert.equal(camera?c.camera:c.display,null);assert.equal(c.closed,false);
+  }finally{if(old)Object.defineProperty(globalThis,'navigator',old);else delete globalThis.navigator;}
+});
+
+for(const camera of [true,false]) test(`${camera?'camera':'screen'} stops only affected media when adaptation and rollback both fail`,async()=>{
+  const c=new Call('/api');c.state.connected=c.state.cameraOn=c.state.sharing=true;c.credentials={room:'test'};c.request=async()=>({});
+  let stopped=0;const track={stop(){stopped++;},applyConstraints:async()=>{throw Error('device lost');}},stream={getTracks:()=>[track],getVideoTracks:()=>[track]};
+  c.camera=c.display=stream;c.cameraVideo=c.video={sender:{replaceTrack:async()=>{}}};c.encoding=async()=>{throw Error('device lost');};
+  const a={timestamp:1000,framesEncoded:1,totalEncodeTime:0},b={timestamp:3000,framesEncoded:31,totalEncodeTime:2,qualityLimitationReason:'cpu'};
+  await c.adaptMedia(camera,b,a);
+  assert.equal(camera?c.state.cameraOn:c.state.sharing,false);assert.equal(camera?c.state.sharing:c.state.cameraOn,true);
+  assert.equal(c.closed,false);assert.equal(c.state.connected,true);assert.ok(stopped>0);assert.match(c.state.error,/重新/);
+});
+
+test('hangup during screen attachment cannot create late audio nodes',async()=>{
+  const old=Object.getOwnPropertyDescriptor(globalThis,'navigator');let release,stopped=0,audioNodes=0;
+  const track={readyState:'live',stop(){stopped++;}},stream={getTracks:()=>[track],getVideoTracks:()=>[track],getAudioTracks:()=>[track]};
+  Object.defineProperty(globalThis,'navigator',{configurable:true,value:{mediaDevices:{getDisplayMedia:async()=>stream}}});
+  try {
+    const c=new Call('/api');c.state.connected=true;c.credentials={roomId:'test'};c.request=async()=>({});c.encoding=async()=>{};
+    c.audio={createMediaStreamSource(){audioNodes++;throw Error('closed');},close:async()=>{}};
+    c.video={sender:{replaceTrack:()=>new Promise(r=>release=r)}};
+    const pending=c.share();while(!release)await Promise.resolve();c.end('',false);release();await pending;
+    assert.equal(audioNodes,0);assert.equal(c.closed,true);assert.ok(stopped>0);assert.equal(c.display,null);
+  }finally{if(old)Object.defineProperty(globalThis,'navigator',old);else delete globalThis.navigator;}
+});
+
+test('recovery deadline ends a call even while negotiation never returns',async()=>{
+  const set=globalThis.setTimeout,clear=globalThis.clearTimeout;let id=0;const timers=new Map();
+  globalThis.setTimeout=(fn,ms)=>{timers.set(++id,{fn,ms});return id;};globalThis.clearTimeout=id=>timers.delete(id);
+  try{
+    const c=new Call('/api');let closed=0,offers=0;c.credentials={role:'host'};c.pc={connectionState:'failed',close(){closed++;}};
+    c.request=async()=>({});c.offer=()=>{offers++;return new Promise(()=>{});};c.connectionChanged();const deadline=c.connectionTimer;
+    timers.get(c.reconnectTimer).fn();
+    for(let i=0;i<20;i++){c.networkAvailable();await timers.get(c.reconnectTimer).fn();}
+    assert.equal(offers,1);assert.equal(c.connectionTimer,deadline);assert.equal(timers.get(deadline).ms,30000);
+    timers.get(deadline).fn();assert.equal(c.closed,true);assert.equal(closed,1);assert.equal(c.retryConnection,null);
+  }finally{globalThis.setTimeout=set;globalThis.clearTimeout=clear;}
+});

@@ -1,0 +1,1089 @@
+{
+  "environment": "Existing macOS Chrome, two Call instances in one page, synthetic animated sources, local Go signaling and TURN; Android emulators idle or under UI smoke testing on same host. Not a real WAN or physical camera benchmark.",
+  "warmupSeconds": 15,
+  "windows": 5,
+  "windowSeconds": 3,
+  "screenTarget": {
+    "width": 2560,
+    "height": 1440,
+    "fps": 30
+  },
+  "cameraTarget": {
+    "width": 1280,
+    "height": 720,
+    "fps": 30
+  },
+  "runs": {
+    "baseline": {
+      "samples": [
+        {
+          "host": [
+            {
+              "direction": "inbound-rtp",
+              "mid": "2",
+              "width": 1280,
+              "height": 720,
+              "fps": 29.966996796252957,
+              "mbps": 0.7284723866529481,
+              "codec": "video/VP8",
+              "encodeMs": null,
+              "decodeMs": 0.9187777777777776,
+              "queueMs": null,
+              "bufferMs": 8.697411111111112,
+              "freezes": 0
+            },
+            {
+              "direction": "outbound-rtp",
+              "mid": "1",
+              "width": 2560,
+              "height": 1440,
+              "fps": 29.966996796252957,
+              "mbps": 2.3817023208408252,
+              "codec": "video/H264",
+              "encodeMs": 10.644444444444442,
+              "decodeMs": null,
+              "queueMs": 6.669402469135798,
+              "bufferMs": null,
+              "freezes": null,
+              "limitation": "none"
+            },
+            {
+              "direction": "outbound-rtp",
+              "mid": "2",
+              "width": 960,
+              "height": 540,
+              "fps": 29.966996796252957,
+              "mbps": 0.32733549940483025,
+              "codec": "video/VP8",
+              "encodeMs": 1.5555555555555551,
+              "decodeMs": null,
+              "queueMs": 1.1558209876543213,
+              "bufferMs": null,
+              "freezes": null,
+              "limitation": "bandwidth"
+            }
+          ],
+          "guest": [
+            {
+              "direction": "inbound-rtp",
+              "mid": "1",
+              "width": 2560,
+              "height": 1440,
+              "fps": 29.965781262802764,
+              "mbps": 2.3816057132675317,
+              "codec": "video/H264",
+              "encodeMs": null,
+              "decodeMs": 1.6194111111111107,
+              "queueMs": null,
+              "bufferMs": 169.92333333333335,
+              "freezes": 0
+            },
+            {
+              "direction": "inbound-rtp",
+              "mid": "2",
+              "width": 960,
+              "height": 540,
+              "fps": 29.965781262802764,
+              "mbps": 0.3273222218898471,
+              "codec": "video/VP8",
+              "encodeMs": null,
+              "decodeMs": 0.4847444444444445,
+              "queueMs": null,
+              "bufferMs": 8.421933333333337,
+              "freezes": 0
+            },
+            {
+              "direction": "outbound-rtp",
+              "mid": "2",
+              "width": 1280,
+              "height": 720,
+              "fps": 29.965781262802764,
+              "mbps": 0.7280193216860434,
+              "codec": "video/VP8",
+              "encodeMs": 2.033333333333333,
+              "decodeMs": null,
+              "queueMs": 0.0015709219858155992,
+              "bufferMs": null,
+              "freezes": null,
+              "limitation": "none"
+            },
+            {
+              "direction": "outbound-rtp",
+              "mid": "1",
+              "fps": 0,
+              "mbps": 0,
+              "codec": "video/H264",
+              "encodeMs": null,
+              "decodeMs": null,
+              "queueMs": null,
+              "bufferMs": null,
+              "freezes": null,
+              "limitation": "none"
+            }
+          ]
+        },
+        {
+          "host": [
+            {
+              "direction": "inbound-rtp",
+              "mid": "2",
+              "width": 1280,
+              "height": 720,
+              "fps": 30.30504812850051,
+              "mbps": 0.9626854778852649,
+              "codec": "video/VP8",
+              "encodeMs": null,
+              "decodeMs": 1.3400769230769232,
+              "queueMs": null,
+              "bufferMs": 9.003725274725268,
+              "freezes": 0
+            },
+            {
+              "direction": "outbound-rtp",
+              "mid": "1",
+              "width": 2560,
+              "height": 1440,
+              "fps": 29.63900311468731,
+              "mbps": 2.457722086051032,
+              "codec": "video/H264",
+              "encodeMs": 10.96629213483146,
+              "decodeMs": null,
+              "queueMs": 0.5883241296518521,
+              "bufferMs": null,
+              "freezes": null,
+              "limitation": "none"
+            },
+            {
+              "direction": "outbound-rtp",
+              "mid": "2",
+              "width": 960,
+              "height": 540,
+              "fps": 30.30504812850051,
+              "mbps": 0.2850646017319935,
+              "codec": "video/VP8",
+              "encodeMs": 1.6483516483516487,
+              "decodeMs": null,
+              "queueMs": 0.36153548387096723,
+              "bufferMs": null,
+              "freezes": null,
+              "limitation": "bandwidth"
+            }
+          ],
+          "guest": [
+            {
+              "direction": "inbound-rtp",
+              "mid": "1",
+              "width": 2560,
+              "height": 1440,
+              "fps": 29.973212417092732,
+              "mbps": 2.457819403914893,
+              "codec": "video/H264",
+              "encodeMs": null,
+              "decodeMs": 1.8389111111111116,
+              "queueMs": null,
+              "bufferMs": 153.1980777777777,
+              "freezes": 0
+            },
+            {
+              "direction": "inbound-rtp",
+              "mid": "2",
+              "width": 960,
+              "height": 540,
+              "fps": 30.306248110615986,
+              "mbps": 0.28507588937035605,
+              "codec": "video/VP8",
+              "encodeMs": null,
+              "decodeMs": 0.6408351648351649,
+              "queueMs": null,
+              "bufferMs": 7.928736263736265,
+              "freezes": 0
+            },
+            {
+              "direction": "outbound-rtp",
+              "mid": "2",
+              "width": 1280,
+              "height": 720,
+              "fps": 30.306248110615986,
+              "mbps": 0.9600912830021217,
+              "codec": "video/VP8",
+              "encodeMs": 2.373626373626373,
+              "decodeMs": null,
+              "queueMs": 0.0007356948228882629,
+              "bufferMs": null,
+              "freezes": null,
+              "limitation": "none"
+            },
+            {
+              "direction": "outbound-rtp",
+              "mid": "1",
+              "fps": 0,
+              "mbps": 0,
+              "codec": "video/H264",
+              "encodeMs": null,
+              "decodeMs": null,
+              "queueMs": null,
+              "bufferMs": null,
+              "freezes": null,
+              "limitation": "none"
+            }
+          ]
+        },
+        {
+          "host": [
+            {
+              "direction": "inbound-rtp",
+              "mid": "2",
+              "width": 1280,
+              "height": 720,
+              "fps": 29.640415312512527,
+              "mbps": 0.9182161053162308,
+              "codec": "video/VP8",
+              "encodeMs": null,
+              "decodeMs": 1.1650112359550562,
+              "queueMs": null,
+              "bufferMs": 8.41926966292135,
+              "freezes": 0
+            },
+            {
+              "direction": "outbound-rtp",
+              "mid": "1",
+              "width": 2560,
+              "height": 1440,
+              "fps": 29.307376938214635,
+              "mbps": 2.7048417609956936,
+              "codec": "video/H264",
+              "encodeMs": 10.511363636363633,
+              "decodeMs": null,
+              "queueMs": 6.682087431694001,
+              "bufferMs": null,
+              "freezes": null,
+              "limitation": "none"
+            },
+            {
+              "direction": "outbound-rtp",
+              "mid": "2",
+              "width": 1280,
+              "height": 720,
+              "fps": 29.640415312512527,
+              "mbps": 0.7046159492695393,
+              "codec": "video/VP8",
+              "encodeMs": 3.8764044943820224,
+              "decodeMs": null,
+              "queueMs": 1.6512989323843419,
+              "bufferMs": null,
+              "freezes": null,
+              "limitation": "none"
+            }
+          ],
+          "guest": [
+            {
+              "direction": "inbound-rtp",
+              "mid": "1",
+              "width": 2560,
+              "height": 1440,
+              "fps": 29.307815403889467,
+              "mbps": 2.704882227949476,
+              "codec": "video/H264",
+              "encodeMs": null,
+              "decodeMs": 1.6455340909090912,
+              "queueMs": null,
+              "bufferMs": 143.4213636363637,
+              "freezes": 0
+            },
+            {
+              "direction": "inbound-rtp",
+              "mid": "2",
+              "width": 1280,
+              "height": 720,
+              "fps": 29.640858760751847,
+              "mbps": 0.7046264909808753,
+              "codec": "video/VP8",
+              "encodeMs": null,
+              "decodeMs": 0.8882359550561796,
+              "queueMs": null,
+              "bufferMs": 9.266561797752807,
+              "freezes": 0
+            },
+            {
+              "direction": "outbound-rtp",
+              "mid": "2",
+              "width": 1280,
+              "height": 720,
+              "fps": 29.640858760751847,
+              "mbps": 0.9182298426849864,
+              "codec": "video/VP8",
+              "encodeMs": 3.6966292134831455,
+              "decodeMs": null,
+              "queueMs": 0.0005893854748603819,
+              "bufferMs": null,
+              "freezes": null,
+              "limitation": "none"
+            },
+            {
+              "direction": "outbound-rtp",
+              "mid": "1",
+              "fps": 0,
+              "mbps": 0,
+              "codec": "video/H264",
+              "encodeMs": null,
+              "decodeMs": null,
+              "queueMs": null,
+              "bufferMs": null,
+              "freezes": null,
+              "limitation": "none"
+            }
+          ]
+        },
+        {
+          "host": [
+            {
+              "direction": "inbound-rtp",
+              "mid": "2",
+              "width": 1280,
+              "height": 720,
+              "fps": 29.95872629577952,
+              "mbps": 0.9248245492517674,
+              "codec": "video/VP8",
+              "encodeMs": null,
+              "decodeMs": 1.0276999999999998,
+              "queueMs": null,
+              "bufferMs": 8.876811111111108,
+              "freezes": 0
+            },
+            {
+              "direction": "outbound-rtp",
+              "mid": "1",
+              "width": 2560,
+              "height": 1440,
+              "fps": 29.95872629577952,
+              "mbps": 3.323035235717329,
+              "codec": "video/H264",
+              "encodeMs": 10.133333333333333,
+              "decodeMs": null,
+              "queueMs": 8.760748653500894,
+              "bufferMs": null,
+              "freezes": null,
+              "limitation": "none"
+            },
+            {
+              "direction": "outbound-rtp",
+              "mid": "2",
+              "width": 1280,
+              "height": 720,
+              "fps": 29.95872629577952,
+              "mbps": 0.9550176193621271,
+              "codec": "video/VP8",
+              "encodeMs": 2.1333333333333337,
+              "decodeMs": null,
+              "queueMs": 2.5924986301369857,
+              "bufferMs": null,
+              "freezes": null,
+              "limitation": "none"
+            }
+          ],
+          "guest": [
+            {
+              "direction": "inbound-rtp",
+              "mid": "1",
+              "width": 2560,
+              "height": 1440,
+              "fps": 29.957341019437003,
+              "mbps": 3.3228815802497387,
+              "codec": "video/H264",
+              "encodeMs": null,
+              "decodeMs": 1.5110999999999997,
+              "queueMs": null,
+              "bufferMs": 139.0830222222222,
+              "freezes": 0
+            },
+            {
+              "direction": "inbound-rtp",
+              "mid": "2",
+              "width": 1280,
+              "height": 720,
+              "fps": 29.957341019437003,
+              "mbps": 0.9549734598307196,
+              "codec": "video/VP8",
+              "encodeMs": null,
+              "decodeMs": 1.0102999999999998,
+              "queueMs": null,
+              "bufferMs": 10.059233333333328,
+              "freezes": 0
+            },
+            {
+              "direction": "outbound-rtp",
+              "mid": "2",
+              "width": 1280,
+              "height": 720,
+              "fps": 29.957341019437003,
+              "mbps": 0.9247817858326417,
+              "codec": "video/VP8",
+              "encodeMs": 2.155555555555555,
+              "decodeMs": null,
+              "queueMs": 0.0006361111111111305,
+              "bufferMs": null,
+              "freezes": null,
+              "limitation": "none"
+            },
+            {
+              "direction": "outbound-rtp",
+              "mid": "1",
+              "fps": 0,
+              "mbps": 0,
+              "codec": "video/H264",
+              "encodeMs": null,
+              "decodeMs": null,
+              "queueMs": null,
+              "bufferMs": null,
+              "freezes": null,
+              "limitation": "none"
+            }
+          ]
+        },
+        {
+          "host": [
+            {
+              "direction": "inbound-rtp",
+              "mid": "2",
+              "width": 1280,
+              "height": 720,
+              "fps": 29.97549123043683,
+              "mbps": 0.9179188181668195,
+              "codec": "video/VP8",
+              "encodeMs": null,
+              "decodeMs": 1.3058444444444448,
+              "queueMs": null,
+              "bufferMs": 8.818844444444451,
+              "freezes": 0
+            },
+            {
+              "direction": "outbound-rtp",
+              "mid": "1",
+              "width": 2560,
+              "height": 1440,
+              "fps": 29.642430216765312,
+              "mbps": 4.0898347075759265,
+              "codec": "video/H264",
+              "encodeMs": 11.157303370786531,
+              "decodeMs": null,
+              "queueMs": 8.137531804733726,
+              "bufferMs": null,
+              "freezes": null,
+              "limitation": "none"
+            },
+            {
+              "direction": "outbound-rtp",
+              "mid": "2",
+              "width": 1280,
+              "height": 720,
+              "fps": 29.97549123043683,
+              "mbps": 0.9277720951952777,
+              "codec": "video/VP8",
+              "encodeMs": 3.088888888888889,
+              "decodeMs": null,
+              "queueMs": 1.829597222222222,
+              "bufferMs": null,
+              "freezes": null,
+              "limitation": "none"
+            }
+          ],
+          "guest": [
+            {
+              "direction": "inbound-rtp",
+              "mid": "1",
+              "width": 2560,
+              "height": 1440,
+              "fps": 29.63806574027115,
+              "mbps": 4.089232530651979,
+              "codec": "video/H264",
+              "encodeMs": null,
+              "decodeMs": 1.9184382022471915,
+              "queueMs": null,
+              "bufferMs": 115.72437078651689,
+              "freezes": 0
+            },
+            {
+              "direction": "inbound-rtp",
+              "mid": "2",
+              "width": 1280,
+              "height": 720,
+              "fps": 29.971077714880934,
+              "mbps": 0.9276354923772291,
+              "codec": "video/VP8",
+              "encodeMs": null,
+              "decodeMs": 1.3374333333333333,
+              "queueMs": null,
+              "bufferMs": 10.902911111111111,
+              "freezes": 0
+            },
+            {
+              "direction": "outbound-rtp",
+              "mid": "2",
+              "width": 1280,
+              "height": 720,
+              "fps": 29.971077714880934,
+              "mbps": 0.9273397777437755,
+              "codec": "video/VP8",
+              "encodeMs": 3.1000000000000014,
+              "decodeMs": null,
+              "queueMs": 0.0007624309392265151,
+              "bufferMs": null,
+              "freezes": null,
+              "limitation": "none"
+            },
+            {
+              "direction": "outbound-rtp",
+              "mid": "1",
+              "fps": 0,
+              "mbps": 0,
+              "codec": "video/H264",
+              "encodeMs": null,
+              "decodeMs": null,
+              "queueMs": null,
+              "bufferMs": null,
+              "freezes": null,
+              "limitation": "none"
+            }
+          ]
+        }
+      ],
+      "connected": true
+    },
+    "after": {
+      "samples": [
+        {
+          "host": [
+            {
+              "direction": "inbound-rtp",
+              "mid": "2",
+              "width": 1280,
+              "height": 720,
+              "fps": 29.96471196721374,
+              "mbps": 0.0988356059526578,
+              "codec": "video/H264",
+              "encodeMs": null,
+              "decodeMs": 1.136844444444444,
+              "queueMs": null,
+              "bufferMs": 12.02351111111111,
+              "freezes": 0
+            },
+            {
+              "direction": "outbound-rtp",
+              "mid": "1",
+              "width": 2560,
+              "height": 1440,
+              "fps": 29.96471196721374,
+              "mbps": 2.7556774348827973,
+              "codec": "video/H264",
+              "encodeMs": 12.288888888888891,
+              "decodeMs": null,
+              "queueMs": 2.530301724137925,
+              "bufferMs": null,
+              "freezes": null,
+              "limitation": "none"
+            },
+            {
+              "direction": "outbound-rtp",
+              "mid": "2",
+              "width": 1280,
+              "height": 720,
+              "fps": 29.631770723133588,
+              "mbps": 0.10679423345114977,
+              "codec": "video/H264",
+              "encodeMs": 5.089887640449437,
+              "decodeMs": null,
+              "queueMs": 0.8399574468085109,
+              "bufferMs": null,
+              "freezes": null,
+              "limitation": "none"
+            }
+          ],
+          "guest": [
+            {
+              "direction": "inbound-rtp",
+              "mid": "1",
+              "width": 2560,
+              "height": 1440,
+              "fps": 30.29369858462362,
+              "mbps": 2.755317747767671,
+              "codec": "video/H264",
+              "encodeMs": null,
+              "decodeMs": 1.9446043956043952,
+              "queueMs": null,
+              "bufferMs": 188.61711111111111,
+              "freezes": 0
+            },
+            {
+              "direction": "inbound-rtp",
+              "mid": "2",
+              "width": 1280,
+              "height": 720,
+              "fps": 30.29369858462362,
+              "mbps": 0.1067802940439986,
+              "codec": "video/H264",
+              "encodeMs": null,
+              "decodeMs": 1.530956043956043,
+              "queueMs": null,
+              "bufferMs": 36.4956888888889,
+              "freezes": 0
+            },
+            {
+              "direction": "outbound-rtp",
+              "mid": "1",
+              "fps": 0,
+              "mbps": 0,
+              "codec": "video/H264",
+              "encodeMs": null,
+              "decodeMs": null,
+              "queueMs": null,
+              "bufferMs": null,
+              "freezes": null,
+              "limitation": "none"
+            },
+            {
+              "direction": "outbound-rtp",
+              "mid": "2",
+              "width": 1280,
+              "height": 720,
+              "fps": 29.960800797979402,
+              "mbps": 0.0998853150870236,
+              "codec": "video/H264",
+              "encodeMs": 5.633333333333335,
+              "decodeMs": null,
+              "queueMs": 0,
+              "bufferMs": null,
+              "freezes": null,
+              "limitation": "none"
+            }
+          ]
+        },
+        {
+          "host": [
+            {
+              "direction": "inbound-rtp",
+              "mid": "2",
+              "width": 1280,
+              "height": 720,
+              "fps": 30.29142871120916,
+              "mbps": 0.10045303506322918,
+              "codec": "video/H264",
+              "encodeMs": null,
+              "decodeMs": 1.1618681318681316,
+              "queueMs": null,
+              "bufferMs": 11.38385714285714,
+              "freezes": 0
+            },
+            {
+              "direction": "outbound-rtp",
+              "mid": "1",
+              "width": 2560,
+              "height": 1440,
+              "fps": 29.62568302524852,
+              "mbps": 2.781139288186858,
+              "codec": "video/H264",
+              "encodeMs": 13.292134831460672,
+              "decodeMs": null,
+              "queueMs": 9.00861538461538,
+              "bufferMs": null,
+              "freezes": null,
+              "limitation": "none"
+            },
+            {
+              "direction": "outbound-rtp",
+              "mid": "2",
+              "width": 1280,
+              "height": 720,
+              "fps": 30.29142871120916,
+              "mbps": 0.09794716830127333,
+              "codec": "video/H264",
+              "encodeMs": 5.406593406593407,
+              "decodeMs": null,
+              "queueMs": 1.0010659340659338,
+              "bufferMs": null,
+              "freezes": null,
+              "limitation": "none"
+            }
+          ],
+          "guest": [
+            {
+              "direction": "inbound-rtp",
+              "mid": "1",
+              "width": 2560,
+              "height": 1440,
+              "fps": 29.96408357852961,
+              "mbps": 2.7816524415030197,
+              "codec": "video/H264",
+              "encodeMs": null,
+              "decodeMs": 2.2070777777777772,
+              "queueMs": null,
+              "bufferMs": 169.59981111111117,
+              "freezes": 0
+            },
+            {
+              "direction": "inbound-rtp",
+              "mid": "2",
+              "width": 1280,
+              "height": 720,
+              "fps": 29.96408357852961,
+              "mbps": 0.09796524072016867,
+              "codec": "video/H264",
+              "encodeMs": null,
+              "decodeMs": 1.6549666666666674,
+              "queueMs": null,
+              "bufferMs": 35.28066666666666,
+              "freezes": 0
+            },
+            {
+              "direction": "outbound-rtp",
+              "mid": "1",
+              "fps": 0,
+              "mbps": 0,
+              "codec": "video/H264",
+              "encodeMs": null,
+              "decodeMs": null,
+              "queueMs": null,
+              "bufferMs": null,
+              "freezes": null,
+              "limitation": "none"
+            },
+            {
+              "direction": "outbound-rtp",
+              "mid": "2",
+              "width": 1280,
+              "height": 720,
+              "fps": 30.297017840513274,
+              "mbps": 0.09940884368012984,
+              "codec": "video/H264",
+              "encodeMs": 5.824175824175821,
+              "decodeMs": null,
+              "queueMs": 0,
+              "bufferMs": null,
+              "freezes": null,
+              "limitation": "none"
+            }
+          ]
+        },
+        {
+          "host": [
+            {
+              "direction": "inbound-rtp",
+              "mid": "2",
+              "width": 1280,
+              "height": 720,
+              "fps": 29.9761298477734,
+              "mbps": 0.10026149456995712,
+              "codec": "video/H264",
+              "encodeMs": null,
+              "decodeMs": 1.3306000000000004,
+              "queueMs": null,
+              "bufferMs": 11.293388888888886,
+              "freezes": 0
+            },
+            {
+              "direction": "outbound-rtp",
+              "mid": "1",
+              "width": 2560,
+              "height": 1440,
+              "fps": 29.30999362893399,
+              "mbps": 2.631208754422036,
+              "codec": "video/H264",
+              "encodeMs": 13.000000000000002,
+              "decodeMs": null,
+              "queueMs": 0.6167415349887218,
+              "bufferMs": null,
+              "freezes": null,
+              "limitation": "none"
+            },
+            {
+              "direction": "outbound-rtp",
+              "mid": "2",
+              "width": 1280,
+              "height": 720,
+              "fps": 29.643061738353694,
+              "mbps": 0.10831641372816324,
+              "codec": "video/H264",
+              "encodeMs": 5.202247191011237,
+              "decodeMs": null,
+              "queueMs": 0.42384042553191503,
+              "bufferMs": null,
+              "freezes": null,
+              "limitation": "none"
+            }
+          ],
+          "guest": [
+            {
+              "direction": "inbound-rtp",
+              "mid": "1",
+              "width": 2560,
+              "height": 1440,
+              "fps": 29.309388269137866,
+              "mbps": 2.631154410227517,
+              "codec": "video/H264",
+              "encodeMs": null,
+              "decodeMs": 2.2434090909090916,
+              "queueMs": null,
+              "bufferMs": 155.76342045454535,
+              "freezes": 0
+            },
+            {
+              "direction": "inbound-rtp",
+              "mid": "2",
+              "width": 1280,
+              "height": 720,
+              "fps": 29.642449499468977,
+              "mbps": 0.10831417659352031,
+              "codec": "video/H264",
+              "encodeMs": null,
+              "decodeMs": 1.9136292134831452,
+              "queueMs": null,
+              "bufferMs": 35.388662921348306,
+              "freezes": 0
+            },
+            {
+              "direction": "outbound-rtp",
+              "mid": "1",
+              "fps": 0,
+              "mbps": 0,
+              "codec": "video/H264",
+              "encodeMs": null,
+              "decodeMs": null,
+              "queueMs": null,
+              "bufferMs": null,
+              "freezes": null,
+              "limitation": "none"
+            },
+            {
+              "direction": "outbound-rtp",
+              "mid": "2",
+              "width": 1280,
+              "height": 720,
+              "fps": 29.975510729800092,
+              "mbps": 0.1002594237991927,
+              "codec": "video/H264",
+              "encodeMs": 5.466666666666667,
+              "decodeMs": null,
+              "queueMs": 0,
+              "bufferMs": null,
+              "freezes": null,
+              "limitation": "none"
+            }
+          ]
+        },
+        {
+          "host": [
+            {
+              "direction": "inbound-rtp",
+              "mid": "2",
+              "width": 1280,
+              "height": 720,
+              "fps": 29.970468551983444,
+              "mbps": 0.10090324149999334,
+              "codec": "video/H264",
+              "encodeMs": null,
+              "decodeMs": 1.3730444444444438,
+              "queueMs": null,
+              "bufferMs": 10.249077777777782,
+              "freezes": 0
+            },
+            {
+              "direction": "outbound-rtp",
+              "mid": "1",
+              "width": 2560,
+              "height": 1440,
+              "fps": 29.970468551983444,
+              "mbps": 2.9928802940592067,
+              "codec": "video/H264",
+              "encodeMs": 12.699999999999987,
+              "decodeMs": null,
+              "queueMs": 5.1963104477612045,
+              "bufferMs": null,
+              "freezes": null,
+              "limitation": "none"
+            },
+            {
+              "direction": "outbound-rtp",
+              "mid": "2",
+              "width": 1280,
+              "height": 720,
+              "fps": 30.303473758116596,
+              "mbps": 0.10450502580952947,
+              "codec": "video/H264",
+              "encodeMs": 5.824175824175827,
+              "decodeMs": null,
+              "queueMs": 1.1199239130434775,
+              "bufferMs": null,
+              "freezes": null,
+              "limitation": "none"
+            }
+          ],
+          "guest": [
+            {
+              "direction": "inbound-rtp",
+              "mid": "1",
+              "width": 2560,
+              "height": 1440,
+              "fps": 29.638232005443342,
+              "mbps": 2.992957915619528,
+              "codec": "video/H264",
+              "encodeMs": null,
+              "decodeMs": 2.097044943820224,
+              "queueMs": null,
+              "bufferMs": 155.36841573033703,
+              "freezes": 0
+            },
+            {
+              "direction": "inbound-rtp",
+              "mid": "2",
+              "width": 1280,
+              "height": 720,
+              "fps": 29.971245848201136,
+              "mbps": 0.10450773618962081,
+              "codec": "video/H264",
+              "encodeMs": null,
+              "decodeMs": 1.8752555555555561,
+              "queueMs": null,
+              "bufferMs": 32.76220000000001,
+              "freezes": 0
+            },
+            {
+              "direction": "outbound-rtp",
+              "mid": "1",
+              "fps": 0,
+              "mbps": 0,
+              "codec": "video/H264",
+              "encodeMs": null,
+              "decodeMs": null,
+              "queueMs": null,
+              "bufferMs": null,
+              "freezes": null,
+              "limitation": "none"
+            },
+            {
+              "direction": "outbound-rtp",
+              "mid": "2",
+              "width": 1280,
+              "height": 720,
+              "fps": 29.971245848201136,
+              "mbps": 0.10090585846635255,
+              "codec": "video/H264",
+              "encodeMs": 5.866666666666672,
+              "decodeMs": null,
+              "queueMs": 0,
+              "bufferMs": null,
+              "freezes": null,
+              "limitation": "none"
+            }
+          ]
+        },
+        {
+          "host": [
+            {
+              "direction": "inbound-rtp",
+              "mid": "2",
+              "width": 1280,
+              "height": 720,
+              "fps": 29.986885618220025,
+              "mbps": 0.09920194862695954,
+              "codec": "video/H264",
+              "encodeMs": null,
+              "decodeMs": 1.2643666666666658,
+              "queueMs": null,
+              "bufferMs": 10.966444444444454,
+              "freezes": 0
+            },
+            {
+              "direction": "outbound-rtp",
+              "mid": "1",
+              "width": 2560,
+              "height": 1440,
+              "fps": 29.653698000239803,
+              "mbps": 3.277697207617697,
+              "codec": "video/H264",
+              "encodeMs": 12.943820224719111,
+              "decodeMs": null,
+              "queueMs": 2.4276833941605593,
+              "bufferMs": null,
+              "freezes": null,
+              "limitation": "none"
+            },
+            {
+              "direction": "outbound-rtp",
+              "mid": "2",
+              "width": 1280,
+              "height": 720,
+              "fps": 29.986885618220025,
+              "mbps": 0.09516638019798307,
+              "codec": "video/H264",
+              "encodeMs": 6.066666666666664,
+              "decodeMs": null,
+              "queueMs": 0.8336333333333329,
+              "bufferMs": null,
+              "freezes": null,
+              "limitation": "none"
+            }
+          ],
+          "guest": [
+            {
+              "direction": "inbound-rtp",
+              "mid": "1",
+              "width": 2560,
+              "height": 1440,
+              "fps": 29.653550858649353,
+              "mbps": 3.2776809436906773,
+              "codec": "video/H264",
+              "encodeMs": null,
+              "decodeMs": 2.3209662921348317,
+              "queueMs": null,
+              "bufferMs": 153.39092134831463,
+              "freezes": 0
+            },
+            {
+              "direction": "inbound-rtp",
+              "mid": "2",
+              "width": 1280,
+              "height": 720,
+              "fps": 29.98673682335328,
+              "mbps": 0.09516590798259397,
+              "codec": "video/H264",
+              "encodeMs": null,
+              "decodeMs": 1.9286111111111117,
+              "queueMs": null,
+              "bufferMs": 33.23646666666665,
+              "freezes": 0
+            },
+            {
+              "direction": "outbound-rtp",
+              "mid": "1",
+              "fps": 0,
+              "mbps": 0,
+              "codec": "video/H264",
+              "encodeMs": null,
+              "decodeMs": null,
+              "queueMs": null,
+              "bufferMs": null,
+              "freezes": null,
+              "limitation": "none"
+            },
+            {
+              "direction": "outbound-rtp",
+              "mid": "2",
+              "width": 1280,
+              "height": 720,
+              "fps": 29.98673682335328,
+              "mbps": 0.09920145638708791,
+              "codec": "video/H264",
+              "encodeMs": 6.188888888888884,
+              "decodeMs": null,
+              "queueMs": 0,
+              "bufferMs": null,
+              "freezes": null,
+              "limitation": "none"
+            }
+          ]
+        }
+      ],
+      "connected": true,
+      "network": "直接连接 · 网络往返 1 ms"
+    }
+  }
+}

@@ -1,0 +1,197 @@
+{
+  "method": "Injected CPU and healthy sender statistics with real Call, canvas media, RTCPeerConnection and local TURN. Healthy samples spaced two seconds. Not a hardware throttling benchmark.",
+  "phases": [
+    {
+      "name": "reduced",
+      "screenLoad": {
+        "level": 2,
+        "healthy": 0
+      },
+      "cameraLoad": {
+        "level": 2,
+        "healthy": 0
+      },
+      "screenFpsLimit": 10,
+      "cameraFpsLimit": 15,
+      "screenDegradationPreference": "maintain-resolution",
+      "selectedScreenQuality": {
+        "width": 2560,
+        "height": 1440,
+        "fps": 30,
+        "bitrate": 12000000,
+        "priority": "maintain-resolution",
+        "resolutionLocked": true,
+        "fpsLocked": false
+      }
+    },
+    {
+      "name": "partially-restored",
+      "screenLoad": {
+        "level": 1,
+        "healthy": 0
+      },
+      "cameraLoad": {
+        "level": 1,
+        "healthy": 0
+      },
+      "screenFpsLimit": 20,
+      "cameraFpsLimit": 24,
+      "screenDegradationPreference": "maintain-resolution",
+      "selectedScreenQuality": {
+        "width": 2560,
+        "height": 1440,
+        "fps": 30,
+        "bitrate": 12000000,
+        "priority": "maintain-resolution",
+        "resolutionLocked": true,
+        "fpsLocked": false
+      }
+    },
+    {
+      "name": "restored",
+      "screenLoad": {
+        "level": 0,
+        "healthy": 0
+      },
+      "cameraLoad": {
+        "level": 0,
+        "healthy": 0
+      },
+      "screenFpsLimit": 30,
+      "cameraFpsLimit": 30,
+      "screenDegradationPreference": "maintain-resolution",
+      "selectedScreenQuality": {
+        "width": 2560,
+        "height": 1440,
+        "fps": 30,
+        "bitrate": 12000000,
+        "priority": "maintain-resolution",
+        "resolutionLocked": true,
+        "fpsLocked": false
+      }
+    }
+  ],
+  "afterIceRestart": {
+    "connected": true,
+    "screen": true,
+    "camera": true,
+    "roomUnchanged": true
+  },
+  "samples": [
+    {
+      "host": [
+        {
+          "direction": "inbound-rtp",
+          "mid": "2",
+          "width": 1280,
+          "height": 720,
+          "fps": 29.97546929368349,
+          "mbps": 0.1013943563112739,
+          "codec": "video/H264",
+          "encodeMs": null,
+          "decodeMs": 1.6049444444444463,
+          "queueMs": null,
+          "bufferMs": 9.629670329670335,
+          "freezes": 0
+        },
+        {
+          "direction": "outbound-rtp",
+          "mid": "1",
+          "width": 2560,
+          "height": 1440,
+          "fps": 29.97546929368349,
+          "mbps": 2.8770535362662195,
+          "codec": "video/H264",
+          "encodeMs": 11.17777777777778,
+          "decodeMs": null,
+          "queueMs": 54.78300206611573,
+          "bufferMs": null,
+          "freezes": null,
+          "limitation": "none"
+        },
+        {
+          "direction": "outbound-rtp",
+          "mid": "2",
+          "width": 1280,
+          "height": 720,
+          "fps": 29.642408523753673,
+          "mbps": 0.10932386712176298,
+          "codec": "video/H264",
+          "encodeMs": 4.696629213483143,
+          "decodeMs": null,
+          "queueMs": 1.7758681318681326,
+          "bufferMs": null,
+          "freezes": null,
+          "limitation": "none"
+        }
+      ],
+      "guest": [
+        {
+          "direction": "inbound-rtp",
+          "mid": "1",
+          "width": 2560,
+          "height": 1440,
+          "fps": 31.630513463411976,
+          "mbps": 2.876120637178615,
+          "codec": "video/H264",
+          "encodeMs": null,
+          "decodeMs": 2.142347368421052,
+          "queueMs": null,
+          "bufferMs": 155.14961052631585,
+          "freezes": 0
+        },
+        {
+          "direction": "inbound-rtp",
+          "mid": "2",
+          "width": 1280,
+          "height": 720,
+          "fps": 29.632796823617536,
+          "mbps": 0.10928841830768787,
+          "codec": "video/H264",
+          "encodeMs": null,
+          "decodeMs": 1.2792247191011228,
+          "queueMs": null,
+          "bufferMs": 23.55420224719102,
+          "freezes": 0
+        },
+        {
+          "direction": "outbound-rtp",
+          "mid": "2",
+          "width": 1280,
+          "height": 720,
+          "fps": 29.96574959691661,
+          "mbps": 0.10136147868098352,
+          "codec": "video/H264",
+          "encodeMs": 4.7666666666666595,
+          "decodeMs": null,
+          "queueMs": 2.197802197804396e-05,
+          "bufferMs": null,
+          "freezes": null,
+          "limitation": "none"
+        },
+        {
+          "direction": "outbound-rtp",
+          "mid": "1",
+          "fps": 0,
+          "mbps": 0,
+          "codec": "video/H264",
+          "encodeMs": null,
+          "decodeMs": null,
+          "queueMs": null,
+          "bufferMs": null,
+          "freezes": null,
+          "limitation": "none"
+        }
+      ]
+    }
+  ],
+  "androidCameraRecovery": {
+    "outageRequestedSeconds": 8,
+    "secondsUntilTenAdditionalDecodedFramesObserved": 5.6477,
+    "framesBefore": 138,
+    "framesAfter": 154,
+    "sameRoom": true,
+    "cameraOnly": true,
+    "samplingCaveat": "Polling RTC counters and reconnecting emulator Wi-Fi; not exact first-frame latency."
+  }
+}
